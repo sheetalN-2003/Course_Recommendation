@@ -5,11 +5,11 @@ from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import nltk
 from streamlit_chat import message
 
-# Ensure NLTK stopwords are downloaded
+import nltk
 nltk.download('stopwords')
+
 
 # Preprocessing and stemming function
 def preprocess_and_stem(text):
