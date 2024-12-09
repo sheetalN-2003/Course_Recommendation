@@ -1,20 +1,16 @@
 import streamlit as st
 import pandas as pd
 import re
-from nltk.corpus import stopwords
-from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import LabelEncoder
+from nltk.stem import PorterStemmer  # Using the PorterStemmer from NLTK as a standalone import
 from streamlit_chat import message
-
-import nltk
-nltk.download('stopwords')
-
 
 # Preprocessing and stemming function
 def preprocess_and_stem(text):
+    stop_words = {'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 'any', 'are', 'aren', 'aren’t', 'aren’t', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below', 'between', 'both', 'but', 'by', 'can', 'cannot', 'could', 'couldn’t', 'couldn’t', 'could’ve', 'did', 'didn’t', 'do', 'does', 'doesn’t', 'doing', 'don’t', 'down', 'during', 'each', 'few', 'for', 'from', 'get', 'got', 'had', 'hadn’t', 'has', 'hasn’t', 'haven’t', 'having', 'have', 'having', 'having', 'here', 'here’s', 'hereafter', 'hereby'}
     ps = PorterStemmer()
-    stop_words = set(stopwords.words('english'))
     text = text.lower()
     text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  # Remove special characters
     words = [ps.stem(word) for word in text.split() if word not in stop_words]
@@ -24,7 +20,7 @@ def load_data():
     uploaded_file = st.file_uploader("Upload your course dataset (CSV format)", type="csv")
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
-        
+
         # Display columns in the uploaded file for debugging
         st.write("Columns in the uploaded file:", df.columns)
 
