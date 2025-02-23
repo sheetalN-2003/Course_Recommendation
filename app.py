@@ -7,6 +7,10 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS as stop_words
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 from streamlit_chat import message
+import nltk
+
+# Download NLTK data (if not already downloaded)
+nltk.download('punkt')
 
 # Initialize stemmer for text preprocessing
 stemmer = PorterStemmer()
@@ -95,7 +99,7 @@ def search_bar(df):
     if st.button("Search"):
         if search_query:
             # Filter courses based on the search query
-            results = df[df['tags'].str.contains(preprocess_text(search_query), na=False, case=False)]
+            results = df[df['tags'].str.contains(preprocess_text(search_query), case=False)]
             if not results.empty:
                 st.write("### Search Results")
                 for _, row in results.iterrows():
@@ -140,6 +144,35 @@ def chatbot_interface(df):
         st.session_state.messages.append({"content": bot_response, "is_user": False})
         message(bot_response, is_user=False)
 
+# Simulate course enrollment
+def enroll_in_course(course_name):
+    if 'enrolled_courses' not in st.session_state:
+        st.session_state.enrolled_courses = []
+    if course_name not in st.session_state.enrolled_courses:
+        st.session_state.enrolled_courses.append(course_name)
+        st.success(f"You have successfully enrolled in {course_name}!")
+    else:
+        st.warning(f"You are already enrolled in {course_name}.")
+
+# Display user dashboard with enrolled courses and progress
+def user_dashboard():
+    st.subheader("Your Dashboard")
+    if 'enrolled_courses' in st.session_state and st.session_state.enrolled_courses:
+        st.write("### Enrolled Courses")
+        for course in st.session_state.enrolled_courses:
+            st.write(f"- {course}")
+        st.write("### Progress Tracker")
+        st.progress(50)  # Simulate 50% progress
+    else:
+        st.write("You are not enrolled in any courses yet.")
+
+# Display popular courses based on ratings
+def display_popular_courses(df):
+    st.subheader("Popular Courses")
+    popular_courses = df.sort_values(by='Ratings', ascending=False).head(5)
+    for _, row in popular_courses.iterrows():
+        st.markdown(f"- [{row['Course Name']}]({row['Course URL']}) (Rating: {row['Ratings']})")
+
 # Main app function to set up the Streamlit UI and navigation
 def main():
     st.set_page_config(page_title="Course Recommendation System", layout="wide")
@@ -149,6 +182,8 @@ def main():
         st.session_state['users'] = []
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = None
+    if 'admin_logged_in' not in st.session_state:
+        st.session_state['admin_logged_in'] = False
 
     menu = ["Home", "Register", "Login", "Admin", "User"]
     choice = st.sidebar.selectbox("Menu", menu)
@@ -190,16 +225,19 @@ def main():
             else:
                 st.error("Invalid username or password.")  # Error for invalid login credentials
 
-    # Admin page for managing users
+    # Admin page for managing users (restricted access)
     elif choice == "Admin":
-        st.subheader("Admin Page")
-        users = st.session_state.get('users', [])
-        if users:
-            st.write("### Registered Users")
-            for user in users:
-                st.write(f"- {user['username']}")
+        if st.session_state.get('admin_logged_in'):
+            st.subheader("Admin Page")
+            users = st.session_state.get('users', [])
+            if users:
+                st.write("### Registered Users")
+                for user in users:
+                    st.write(f"- {user['username']}")
+            else:
+                st.write("No registered users.")  # Message if there are no registered users
         else:
-            st.write("No registered users.")  # Message if there are no registered users
+            st.error("You do not have permission to access this page.")  # Restrict access
 
     # User page for logged-in users to explore courses
     elif choice == "User":
@@ -211,6 +249,8 @@ def main():
                 st.write("### Explore Courses")
                 search_bar(df)  # Display the search bar for course search
                 chatbot_interface(df)  # Display the chatbot interface for course recommendations
+                display_popular_courses(df)  # Display popular courses
+                user_dashboard()  # Display user dashboard
         else:
             st.error("Please log in to access the user page.")  # Error if user is not logged in
 
