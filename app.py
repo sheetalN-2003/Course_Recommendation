@@ -4,23 +4,21 @@ import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS as stop_words
-from nltk.stem import PorterStemmer
-from nltk.tokenize import word_tokenize
 from streamlit_chat import message
-import nltk
+import spacy
 
-# Download NLTK data (if not already downloaded)
-nltk.download()
-
-# Initialize stemmer for text preprocessing
-stemmer = PorterStemmer()
+# Load the spaCy English model
+nlp = spacy.load("en_core_web_sm")
 
 # Preprocessing function to clean and normalize text
 def preprocess_text(text):
-    text = text.lower()  # Convert to lowercase
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  # Remove non-alphanumeric characters
-    words = word_tokenize(text)  # Tokenize the text into words
-    words = [stemmer.stem(word) for word in words if word not in stop_words]  # Remove stop words and apply stemming
+    # Convert to lowercase
+    text = text.lower()
+    # Remove non-alphanumeric characters
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+    # Tokenize and lemmatize using spaCy
+    doc = nlp(text)
+    words = [token.lemma_ for token in doc if token.text not in stop_words]  # Remove stop words and lemmatize
     return " ".join(words)  # Join words back into a string
 
 # Load and preprocess the course data
@@ -57,9 +55,9 @@ def load_data():
             df.fillna('', inplace=True)  # Fill missing values with empty strings
             # Create a new 'tags' column by combining relevant columns for better matching
             df['tags'] = (df['Course Name'].astype(str) + ' ' +
-                           df['Difficulty Level'].astype(str) + ' ' +
-                           df['Course Description'].astype(str) + ' ' +
-                           df['Skills'].astype(str))
+                          df['Difficulty Level'].astype(str) + ' ' +
+                          df['Course Description'].astype(str) + ' ' +
+                          df['Skills'].astype(str))
             df['tags'] = df['tags'].apply(preprocess_text)  # Apply text preprocessing
             st.session_state['course_data'] = df  # Save the processed data to session state
         except Exception as e:
@@ -144,35 +142,6 @@ def chatbot_interface(df):
         st.session_state.messages.append({"content": bot_response, "is_user": False})
         message(bot_response, is_user=False)
 
-# Simulate course enrollment
-def enroll_in_course(course_name):
-    if 'enrolled_courses' not in st.session_state:
-        st.session_state.enrolled_courses = []
-    if course_name not in st.session_state.enrolled_courses:
-        st.session_state.enrolled_courses.append(course_name)
-        st.success(f"You have successfully enrolled in {course_name}!")
-    else:
-        st.warning(f"You are already enrolled in {course_name}.")
-
-# Display user dashboard with enrolled courses and progress
-def user_dashboard():
-    st.subheader("Your Dashboard")
-    if 'enrolled_courses' in st.session_state and st.session_state.enrolled_courses:
-        st.write("### Enrolled Courses")
-        for course in st.session_state.enrolled_courses:
-            st.write(f"- {course}")
-        st.write("### Progress Tracker")
-        st.progress(50)  # Simulate 50% progress
-    else:
-        st.write("You are not enrolled in any courses yet.")
-
-# Display popular courses based on ratings
-def display_popular_courses(df):
-    st.subheader("Popular Courses")
-    popular_courses = df.sort_values(by='Ratings', ascending=False).head(5)
-    for _, row in popular_courses.iterrows():
-        st.markdown(f"- [{row['Course Name']}]({row['Course URL']}) (Rating: {row['Ratings']})")
-
 # Main app function to set up the Streamlit UI and navigation
 def main():
     st.set_page_config(page_title="Course Recommendation System", layout="wide")
@@ -182,8 +151,6 @@ def main():
         st.session_state['users'] = []
     if 'logged_in' not in st.session_state:
         st.session_state['logged_in'] = None
-    if 'admin_logged_in' not in st.session_state:
-        st.session_state['admin_logged_in'] = False
 
     menu = ["Home", "Register", "Login", "Admin", "User"]
     choice = st.sidebar.selectbox("Menu", menu)
