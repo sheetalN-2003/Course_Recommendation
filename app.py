@@ -10,7 +10,7 @@ from streamlit_chat import message
 import nltk
 
 # Download NLTK data (if not already downloaded)
-nltk.download('punkt')
+nltk.download()
 
 # Initialize stemmer for text preprocessing
 stemmer = PorterStemmer()
