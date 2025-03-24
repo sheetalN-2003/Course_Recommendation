@@ -7,5 +7,5 @@ openai
 speechrecognition
 pyttsx3
 streamlit-chat
-spacy validate
-spacy link en_core_web_sm en
+spacyvalidate
+spacylinken_core_web_sm en
