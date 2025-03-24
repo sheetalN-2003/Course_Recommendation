@@ -1,226 +1,148 @@
 import streamlit as st
 import pandas as pd
 import re
+import spacy
+import openai
+import speech_recognition as sr
+import pyttsx3
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS as stop_words
 from streamlit_chat import message
-import spacy
+import random
 
-# Load the spaCy English model
+# Load spaCy model
 nlp = spacy.load("en_core_web_sm")
 
-# Preprocessing function to clean and normalize text
-def preprocess_text(text):
-    # Convert to lowercase
-    text = text.lower()
-    # Remove non-alphanumeric characters
-    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-    # Tokenize and lemmatize using spaCy
-    doc = nlp(text)
-    words = [token.lemma_ for token in doc if token.text not in stop_words]  # Remove stop words and lemmatize
-    return " ".join(words)  # Join words back into a string
+# Initialize text-to-speech engine
+engine = pyttsx3.init()
 
-# Load and preprocess the course data
+# Initialize session state for authentication
+if 'users' not in st.session_state:
+    st.session_state['users'] = []
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = None
+if 'admin_logged_in' not in st.session_state:
+    st.session_state['admin_logged_in'] = False
+
+# Preprocessing function
+def preprocess_text(text):
+    text = text.lower()
+    text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+    doc = nlp(text)
+    words = [token.lemma_ for token in doc if not token.is_stop]
+    return " ".join(words)
+
+# Load course data
 def load_data():
-    # Check if course data is already stored in session state
     if 'course_data' not in st.session_state:
         st.session_state['course_data'] = pd.DataFrame(columns=[
             'Course Name', 'Difficulty Level', 'Course Description', 'Skills', 'Ratings', 'Course URL'
         ])
-
-    # Upload the CSV file with course data
     uploaded_file = st.file_uploader("Upload your course dataset (CSV format)", type="csv")
     if uploaded_file is not None:
-        try:
-            df = pd.read_csv(uploaded_file)  # Read the CSV file
-            st.write("Columns in the uploaded file:", df.columns)
-
-            # Clean up column names and ensure required columns are present
-            df.columns = df.columns.str.strip()  # Remove extra spaces from column names
-            required_columns = ['Course Name', 'Difficulty Level', 'Course Description', 'Skills', 'Ratings', 'Course URL']
-            missing_columns = [col for col in required_columns if col not in df.columns]
-
-            # Handle missing columns
-            if missing_columns:
-                st.warning(f"The uploaded dataset is missing the following columns: {', '.join(missing_columns)}")
-                for col in missing_columns:
-                    if col == 'Ratings':
-                        df['Ratings'] = "N/A"  # Add default value for missing Ratings
-                    elif col == 'Course URL':
-                        df['Course URL'] = "#"  # Add default URL for missing Course URL
-                    elif col in ['Course Name', 'Difficulty Level', 'Course Description', 'Skills']:
-                        df[col] = ""  # Add empty values for missing text fields
-
-            df.fillna('', inplace=True)  # Fill missing values with empty strings
-            # Create a new 'tags' column by combining relevant columns for better matching
-            df['tags'] = (df['Course Name'].astype(str) + ' ' +
-                          df['Difficulty Level'].astype(str) + ' ' +
-                          df['Course Description'].astype(str) + ' ' +
-                          df['Skills'].astype(str))
-            df['tags'] = df['tags'].apply(preprocess_text)  # Apply text preprocessing
-            st.session_state['course_data'] = df  # Save the processed data to session state
-        except Exception as e:
-            st.error(f"Error reading the file: {e}")
+        df = pd.read_csv(uploaded_file)
+        df.fillna('', inplace=True)
+        df['tags'] = df.apply(lambda x: preprocess_text(f"{x['Course Name']} {x['Difficulty Level']} {x['Course Description']} {x['Skills']}"), axis=1)
+        st.session_state['course_data'] = df
     return st.session_state['course_data']
 
-# Recommendation function using cosine similarity and TF-IDF
-def recommend_courses(df, vectorizer, query, num_recommendations=5):
-    # Preprocess the user's query
+# Recommend courses
+def recommend_courses(df, query, num_recommendations=5):
+    vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
     query_processed = preprocess_text(query)
-
-    # Vectorize the dataset and the user's query
-    vectors = vectorizer.fit_transform(df['tags']).toarray()  # Vectorize the tags column of the dataset
-    query_vector = vectorizer.transform([query_processed]).toarray()  # Vectorize the user's query
-
-    # Compute cosine similarity between the query and all courses
+    vectors = vectorizer.fit_transform(df['tags']).toarray()
+    query_vector = vectorizer.transform([query_processed]).toarray()
     similarities = cosine_similarity(query_vector, vectors).flatten()
-
-    # Get the top N similar courses based on cosine similarity
     similar_courses = sorted(enumerate(similarities), key=lambda x: x[1], reverse=True)[:num_recommendations]
+    return [df.iloc[i[0]] for i in similar_courses]
 
-    # Create a list of recommendations
-    recommendations = []
-    for i, score in similar_courses:
-        recommendations.append({
-            'Course Name': df.iloc[i]['Course Name'],
-            'Rating': df.iloc[i]['Ratings'],
-            'URL': df.iloc[i]['Course URL'],
-            'Similarity Score': round(score, 2)
-        })
-    return recommendations
+# AI Voice Assistant
+def voice_assistant():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        st.write("Listening...")
+        try:
+            audio = recognizer.listen(source)
+            text = recognizer.recognize_google(audio)
+            return text
+        except sr.UnknownValueError:
+            return "Sorry, I didn't understand that."
 
-# Search bar function to allow users to search for courses based on keywords
-def search_bar(df):
-    st.subheader("Search Courses")
-    search_query = st.text_input("Enter a keyword or skill to search for courses:")
-    if st.button("Search"):
-        if search_query:
-            # Filter courses based on the search query
-            results = df[df['tags'].str.contains(preprocess_text(search_query), case=False)]
-            if not results.empty:
-                st.write("### Search Results")
-                for _, row in results.iterrows():
-                    st.markdown(f"- [{row['Course Name']}]({row['Course URL']}) (Rating: {row['Ratings']})")
-            else:
-                st.write("No courses found for the given query.")
-        else:
-            st.error("Please enter a keyword or skill to search.")  # Error if no input is given
+# Gamification Feature
+def mini_quiz():
+    st.write("Answer a quick question to get personalized recommendations!")
+    options = ["Beginner", "Intermediate", "Advanced"]
+    level = st.radio("Select your expertise level:", options)
+    interest = st.text_input("Enter a topic you're interested in:")
+    if st.button("Get Recommendations"):
+        df = st.session_state.get('course_data', pd.DataFrame())
+        if not df.empty:
+            courses = recommend_courses(df, f"{interest} {level}")
+            for course in courses:
+                st.markdown(f"- [{course['Course Name']}]({course['Course URL']}) (Rating: {course['Ratings']})")
 
-# Chatbot interface for recommending courses based on user input
-def chatbot_interface(df):
-    st.markdown("<h2 style='text-align: center;'>Course Recommendation Chatbot</h2>", unsafe_allow_html=True)
-
-    # Initialize messages in session state if not already done
+# Chatbot with Voice Feature
+def chatbot_interface():
+    st.markdown("### AI Course Chatbot")
     if 'messages' not in st.session_state:
-        st.session_state.messages = []
-
-    # Display previous conversation messages (if any)
+        st.session_state['messages'] = []
     for msg in st.session_state.messages:
         message(msg['content'], is_user=msg['is_user'])
-
-    # Input field for user to enter their message
-    user_input = st.text_input("You:", key="chat_input", placeholder="Ask about courses or skills...")
-    if st.button("Send", key="send_button") and user_input:
+    user_input = st.text_input("You:")
+    if st.button("Ask AI"):
         st.session_state.messages.append({"content": user_input, "is_user": True})
-
-        # Initialize TfidfVectorizer for text vectorization
-        vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
-
-        # Call the recommendation function
-        recommendations = recommend_courses(df, vectorizer, user_input)
-
-        # Create a response based on the recommendations
-        if recommendations:
-            bot_response = "Here are some course recommendations for you:\n"
-            for rec in recommendations:
-                bot_response += f"- [{rec['Course Name']}]({rec['URL']}) (Rating: {rec['Rating']}, Similarity: {rec['Similarity Score']})\n"
-        else:
-            bot_response = "Sorry, I couldn't find any matching courses."
-
-        # Append the bot's response to the session state
+        response = recommend_courses(st.session_state.get('course_data', pd.DataFrame()), user_input)
+        bot_response = "Here are some recommendations:\n" + '\n'.join([f"- {course['Course Name']}" for course in response])
         st.session_state.messages.append({"content": bot_response, "is_user": False})
         message(bot_response, is_user=False)
+        engine.say(bot_response)
+        engine.runAndWait()
 
-# Main app function to set up the Streamlit UI and navigation
-def main():
-    st.set_page_config(page_title="Course Recommendation System", layout="wide")
+# User Authentication
+def login():
+    st.subheader("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if any(user['username'] == username and user['password'] == password for user in st.session_state['users']):
+            st.session_state['logged_in'] = username
+            st.success(f"Welcome, {username}!")
+        else:
+            st.error("Invalid username or password.")
 
-    # Initialize session state variables for user management
-    if 'users' not in st.session_state:
-        st.session_state['users'] = []
-    if 'logged_in' not in st.session_state:
+def register():
+    st.subheader("Register")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Register"):
+        st.session_state['users'].append({"username": username, "password": password})
+        st.success("Registration successful!")
+
+def logout():
+    if st.button("Logout"):
         st.session_state['logged_in'] = None
+        st.success("Logged out successfully!")
 
-    menu = ["Home", "Register", "Login", "Admin", "User"]
-    choice = st.sidebar.selectbox("Menu", menu)
-
-    # Home page content
+# Main App
+def main():
+    st.set_page_config(page_title="Advanced Course Recommender", layout="wide")
+    st.title("AI-Powered Course Recommendation System")
+    menu = ["Home", "Login", "Register", "Chatbot", "Upload Data", "Mini Quiz"]
+    choice = st.sidebar.selectbox("Navigation", menu)
     if choice == "Home":
-        st.title("Welcome to the Course Recommendation System")
-        st.write("This platform helps you discover courses tailored to your interests.")
-
-    # Register page for new users
-    elif choice == "Register":
-        st.subheader("Register")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        confirm_password = st.text_input("Confirm Password", type="password")
-
-        if st.button("Register"):
-            if password == confirm_password:
-                users = st.session_state.get('users', [])
-                if any(user['username'] == username for user in users):
-                    st.error("Username already exists. Please choose a different username.")
-                else:
-                    users.append({"username": username, "password": password})
-                    st.session_state['users'] = users
-                    st.success("Registration successful!")
-            else:
-                st.error("Passwords do not match.")  # Error if passwords don't match
-
-    # Login page for existing users
+        st.write("Welcome to the AI-driven Course Recommendation System!")
     elif choice == "Login":
-        st.subheader("Login")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            users = st.session_state.get('users', [])
-            if any(user['username'] == username and user['password'] == password for user in users):
-                st.session_state['logged_in'] = username
-                st.success(f"Welcome, {username}!")
-            else:
-                st.error("Invalid username or password.")  # Error for invalid login credentials
+        login()
+    elif choice == "Register":
+        register()
+    elif choice == "Chatbot":
+        chatbot_interface()
+    elif choice == "Upload Data":
+        load_data()
+    elif choice == "Mini Quiz":
+        mini_quiz()
+    if st.session_state['logged_in']:
+        logout()
 
-    # Admin page for managing users (restricted access)
-    elif choice == "Admin":
-        if st.session_state.get('admin_logged_in'):
-            st.subheader("Admin Page")
-            users = st.session_state.get('users', [])
-            if users:
-                st.write("### Registered Users")
-                for user in users:
-                    st.write(f"- {user['username']}")
-            else:
-                st.write("No registered users.")  # Message if there are no registered users
-        else:
-            st.error("You do not have permission to access this page.")  # Restrict access
-
-    # User page for logged-in users to explore courses
-    elif choice == "User":
-        if st.session_state['logged_in']:
-            st.subheader("User Page")
-            st.write("Welcome to the user page. Use the navigation options to explore courses.")
-            df = load_data()
-            if not df.empty:
-                st.write("### Explore Courses")
-                search_bar(df)  # Display the search bar for course search
-                chatbot_interface(df)  # Display the chatbot interface for course recommendations
-                display_popular_courses(df)  # Display popular courses
-                user_dashboard()  # Display user dashboard
-        else:
-            st.error("Please log in to access the user page.")  # Error if user is not logged in
-
-# Run the Streamlit app
 if __name__ == '__main__':
     main()
