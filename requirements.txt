@@ -8,4 +8,4 @@ speechrecognition
 pyttsx3
 streamlit-chat
 spacyvalidate
-spacylinken_core_web_sm en
+spacylinken_core_web_sm-en
