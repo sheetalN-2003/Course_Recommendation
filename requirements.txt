@@ -5,5 +5,5 @@ scikit-learn
 nltk
 openai
 speechrecognition
-pyttsx3
+gtts
 streamlit-chat
