@@ -3,152 +3,135 @@ import pandas as pd
 import numpy as np
 import re
 import nltk
-from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+import speech_recognition as sr
+from gtts import gTTS
+import os
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from streamlit_chat import message
-import speech_recognition as sr
-import pyttsx3
 
-# Download NLTK resources
 nltk.download('punkt')
+nltk.download('stopwords')
 nltk.download('wordnet')
 
-# Initialize Lemmatizer
 lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))
 
-# Text Preprocessing Function
+# Function to preprocess text
 def preprocess_text(text):
     text = text.lower()
     text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
     words = word_tokenize(text)
-    words = [lemmatizer.lemmatize(word) for word in words]
-    return " ".join(words)
+    words = [lemmatizer.lemmatize(word) for word in words if word not in stop_words]
+    return ' '.join(words)
 
-# Initialize Speech Engine
-engine = pyttsx3.init()
-
-# Load Data
+# Function to load course data
 def load_data():
     if 'course_data' not in st.session_state:
-        st.session_state['course_data'] = pd.DataFrame(columns=['Course Name', 'Difficulty Level', 'Course Description', 'Skills', 'Ratings', 'Course URL'])
-
+        st.session_state['course_data'] = pd.DataFrame(columns=[
+            'Course Name', 'Difficulty Level', 'Course Description', 'Skills', 'Ratings', 'Course URL'
+        ])
     uploaded_file = st.file_uploader("Upload Course Dataset (CSV)", type="csv")
-    if uploaded_file:
+    if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
-        required_columns = ['Course Name', 'Difficulty Level', 'Course Description', 'Skills', 'Ratings', 'Course URL']
         df.fillna('', inplace=True)
-        df['tags'] = (df['Course Name'] + ' ' + df['Difficulty Level'] + ' ' + df['Course Description'] + ' ' + df['Skills']).apply(preprocess_text)
+        df['tags'] = df[['Course Name', 'Difficulty Level', 'Course Description', 'Skills']].apply(lambda x: ' '.join(x), axis=1)
+        df['tags'] = df['tags'].apply(preprocess_text)
         st.session_state['course_data'] = df
-
     return st.session_state['course_data']
 
-# Recommend Courses
+# Function to recommend courses
 def recommend_courses(df, query, num_recommendations=5):
     vectorizer = TfidfVectorizer(max_features=5000, stop_words='english')
     df['tags'] = df['tags'].apply(preprocess_text)
     vectors = vectorizer.fit_transform(df['tags']).toarray()
     query_vector = vectorizer.transform([preprocess_text(query)]).toarray()
     similarities = cosine_similarity(query_vector, vectors).flatten()
-    top_courses = sorted(enumerate(similarities), key=lambda x: x[1], reverse=True)[:num_recommendations]
-    
-    return [{"Course Name": df.iloc[i]['Course Name'], "URL": df.iloc[i]['Course URL'], "Rating": df.iloc[i]['Ratings']} for i, _ in top_courses]
+    similar_courses = sorted(enumerate(similarities), key=lambda x: x[1], reverse=True)[:num_recommendations]
+    recommendations = [{
+        'Course Name': df.iloc[i]['Course Name'],
+        'Rating': df.iloc[i]['Ratings'],
+        'URL': df.iloc[i]['Course URL'],
+        'Similarity Score': round(score, 2)
+    } for i, score in similar_courses]
+    return recommendations
 
-# Search Courses
-def search_courses(df):
-    query = st.text_input("Enter skill or keyword:")
-    if st.button("Search") and query:
-        results = df[df['tags'].str.contains(preprocess_text(query), case=False)]
-        st.write("### Search Results")
-        for _, row in results.iterrows():
-            st.markdown(f"- [{row['Course Name']}]({row['Course URL']}) (Rating: {row['Ratings']})")
+# Quiz for personalized course recommendations
+def quiz_recommendation(df):
+    st.subheader("Course Recommendation Quiz")
+    interests = st.multiselect("Select your areas of interest:", df['Skills'].explode().unique())
+    difficulty = st.selectbox("Preferred difficulty level:", ['Beginner', 'Intermediate', 'Advanced'])
+    if st.button("Get Recommendations"):
+        filtered_df = df[df['Skills'].apply(lambda x: any(skill in x for skill in interests)) & (df['Difficulty Level'] == difficulty)]
+        if not filtered_df.empty:
+            st.write("### Recommended Courses:")
+            for _, row in filtered_df.iterrows():
+                st.markdown(f"- [{row['Course Name']}]({row['Course URL']}) (Rating: {row['Ratings']})")
+        else:
+            st.write("No matching courses found.")
 
-# Chatbot with Voice Assistant
+# Voice Assistant Function
+def speak(text):
+    tts = gTTS(text=text, lang='en')
+    tts.save("response.mp3")
+    os.system("mpg321 response.mp3")
+
+# Gamification: Simple quiz-based rewards
+def gamification():
+    st.subheader("Learning Rewards")
+    score = 0
+    q1 = st.radio("What is Python mainly used for?", ["Web Development", "Data Science", "Both"])
+    if q1 == "Both":
+        score += 1
+    q2 = st.radio("Which library is used for machine learning?", ["NumPy", "scikit-learn", "Flask"])
+    if q2 == "scikit-learn":
+        score += 1
+    if st.button("Submit Answers"):
+        st.write(f"Your score: {score}/2")
+        if score == 2:
+            st.success("Great job! Here are some advanced courses.")
+        else:
+            st.warning("Keep learning! Here are some beginner-friendly courses.")
+
+# Chatbot
 def chatbot_interface(df):
-    st.subheader("AI Course Recommendation Chatbot")
+    st.header("AI Course Recommendation Chatbot")
     if 'messages' not in st.session_state:
         st.session_state.messages = []
-
     for msg in st.session_state.messages:
         message(msg['content'], is_user=msg['is_user'])
-
-    user_input = st.text_input("You:", key="chat_input")
-    
-    if st.button("Send"):
+    user_input = st.text_input("You:", key="chat_input", placeholder="Ask about courses...")
+    if st.button("Send") and user_input:
         st.session_state.messages.append({"content": user_input, "is_user": True})
         recommendations = recommend_courses(df, user_input)
-
-        if recommendations:
-            bot_response = "Here are some courses for you:\n"
-            for rec in recommendations:
-                bot_response += f"- [{rec['Course Name']}]({rec['URL']}) (Rating: {rec['Rating']})\n"
-        else:
-            bot_response = "No matching courses found."
-
+        bot_response = "Here are some course recommendations:\n"
+        for rec in recommendations:
+            bot_response += f"- [{rec['Course Name']}]({rec['URL']}) (Rating: {rec['Rating']})\n"
+        if not recommendations:
+            bot_response = "Sorry, no matching courses found."
         st.session_state.messages.append({"content": bot_response, "is_user": False})
-        engine.say(bot_response)
-        engine.runAndWait()
         message(bot_response, is_user=False)
+        speak(bot_response)
 
-# User Authentication System
-def user_auth():
-    if 'users' not in st.session_state:
-        st.session_state['users'] = []
-    if 'logged_in' not in st.session_state:
-        st.session_state['logged_in'] = None
-    if 'admin_logged_in' not in st.session_state:
-        st.session_state['admin_logged_in'] = False
-
-    menu = ["Home", "Register", "Login", "Logout", "Admin Login", "Admin Logout", "User"]
+# Main function
+def main():
+    st.set_page_config(page_title="AI Course Recommender", layout="wide")
+    menu = ["Home", "Register", "Login", "Admin", "User"]
     choice = st.sidebar.selectbox("Menu", menu)
-
     if choice == "Home":
-        st.title("Course Recommendation System")
-    elif choice == "Register":
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Register"):
-            if any(user['username'] == username for user in st.session_state['users']):
-                st.error("Username already exists.")
-            else:
-                st.session_state['users'].append({"username": username, "password": password})
-                st.success("Registration successful!")
-    elif choice == "Login":
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if any(user['username'] == username and user['password'] == password for user in st.session_state['users']):
-                st.session_state['logged_in'] = username
-                st.success(f"Welcome, {username}!")
-            else:
-                st.error("Invalid credentials")
-    elif choice == "Logout":
-        st.session_state['logged_in'] = None
-        st.success("You have been logged out.")
-    elif choice == "Admin Login":
-        admin_username = st.text_input("Admin Username")
-        admin_password = st.text_input("Admin Password", type="password")
-        if st.button("Login as Admin"):
-            if admin_username == "admin" and admin_password == "admin123":
-                st.session_state['admin_logged_in'] = True
-                st.success("Admin logged in successfully.")
-            else:
-                st.error("Invalid admin credentials")
-    elif choice == "Admin Logout":
-        st.session_state['admin_logged_in'] = False
-        st.success("Admin logged out.")
+        st.title("Welcome to the AI Course Recommendation System")
     elif choice == "User":
-        if st.session_state['logged_in']:
-            st.subheader(f"Welcome, {st.session_state['logged_in']}")
-            df = load_data()
-            if not df.empty:
-                search_courses(df)
-                chatbot_interface(df)
-        else:
-            st.error("Please log in.")
+        df = load_data()
+        if not df.empty:
+            chatbot_interface(df)
+            quiz_recommendation(df)
+            gamification()
+    if st.sidebar.button("Logout"):
+        st.session_state['logged_in'] = None
+        st.success("Logged out successfully.")
 
-# Run Streamlit App
 if __name__ == "__main__":
-    st.set_page_config(page_title="AI Course Recommendation System", layout="wide")
-    user_auth()
+    main()
