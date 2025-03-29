@@ -2,7 +2,7 @@ streamlit
 pandas
 numpy
 scikit-learn
-spacy
+nltk
 openai
 speechrecognition
 pyttsx3
