@@ -174,6 +174,12 @@ def admin_panel():
                         st.error(f"Missing required columns. Needed: {', '.join(required_cols)}")
                 except Exception as e:
                     st.error(f"Error loading Udemy data: {str(e)}")
+
+        if 'Skills' not in df.columns:
+    st.error("Column 'Skills' not found in the dataset. Please check the data source.")
+else:
+    category = st.selectbox("Category", ["All"] + list(df['Skills'].explode().unique()))
+
         
         # Coursera Dataset Upload
         with st.expander("Upload Coursera Dataset"):
@@ -209,7 +215,11 @@ def admin_panel():
                             st.success(f"Merged {len(merged_df)} courses into master catalog!")
                         except Exception as e:
                             st.error(f"Merge failed: {str(e)}")
-
+if 'Skills' not in df.columns:
+    st.error("Column 'Skills' not found in the dataset. Please check the data source.")
+else:
+    category = st.selectbox("Category", ["All"] + list(df['Skills'].explode().unique()))
+    
     with tab2:
         st.subheader("User Management")
         users_df = pd.DataFrame.from_dict(st.session_state.users, orient='index')
