@@ -1,2 +1,2 @@
-#!/bin/bash
-python -m spacy download en_core_web_sm
+mkdir -p ~/.nltk_data
+python -m nltk.downloader -d ~/.nltk_data punkt stopwords wordnet omw-1.4
