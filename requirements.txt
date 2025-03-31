@@ -14,3 +14,4 @@ beautifulsoup4
 streamlit-chat
 python-dotenv
 streamlit-webrtc
+sentencepiece
