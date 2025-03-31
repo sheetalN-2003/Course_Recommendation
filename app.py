@@ -22,6 +22,11 @@ import io
 import requests
 from bs4 import BeautifulSoup
 from transformers import pipeline
+from streamlit_webrtc import webrtc_streamer
+
+def voice_input():
+    webrtc_streamer(key="voice-input")
+    # Add processing logic for the audio stream
 
 # Initialize NLTK
 nltk.download('punkt')
