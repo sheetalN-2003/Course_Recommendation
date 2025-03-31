@@ -129,17 +129,64 @@ def logout():
     st.rerun()
 
 # Admin panel with enhanced features
-def admin_panel():
+
+    def admin_panel():
     if st.session_state['logged_in'] != 'admin':
         st.error("Access Denied: Admins only!")
         return
     
     st.title("Admin Dashboard")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["User Management", "Content Management", "Analytics", "System Settings"])
+    tab1, tab2, tab3 = st.tabs(["Dataset Management", "User Management", "System Analytics"])
     
     with tab1:
-        st.subheader("User Management")
+        st.subheader("Upload Platform Datasets")
+        
+        # Udemy Dataset Upload
+        with st.expander("Upload Udemy Dataset", expanded=True):
+            udemy_file = st.file_uploader("Choose Udemy CSV", type=['csv'], key='udemy_upload')
+            if udemy_file:
+                try:
+                    udemy_df = pd.read_csv(udemy_file)
+                    required_cols = ['course_title', 'url', 'price', 'num_subscribers', 'avg_rating']
+                    if all(col in udemy_df.columns for col in required_cols):
+                        st.session_state['platform_datasets']['udemy'] = udemy_df
+                        st.success("Udemy dataset uploaded successfully!")
+                        st.dataframe(udemy_df.head(3))
+                    else:
+                        st.error(f"Missing required columns. Needed: {', '.join(required_cols)}")
+                except Exception as e:
+                    st.error(f"Error loading Udemy data: {str(e)}")
+        
+        # Coursera Dataset Upload
+        with st.expander("Upload Coursera Dataset"):
+            coursera_file = st.file_uploader("Choose Coursera CSV", type=['csv'], key='coursera_upload')
+            if coursera_file:
+                try:
+                    coursera_df = pd.read_csv(coursera_file)
+                    required_cols = ['course_name', 'course_url', 'course_rating', 'course_difficulty']
+                    if all(col in coursera_df.columns for col in required_cols):
+                        st.session_state['platform_datasets']['coursera'] = coursera_df
+                        st.success("Coursera dataset uploaded successfully!")
+                        st.dataframe(coursera_df.head(3))
+                    else:
+                        st.error(f"Missing required columns. Needed: {', '.join(required_cols)}")
+                except Exception as e:
+                    st.error(f"Error loading Coursera data: {str(e)}")
+        
+        # Dataset Merging
+        if not st.session_state['platform_datasets']['udemy'].empty or not st.session_state['platform_datasets']['coursera'].empty:
+            with st.expander("Merge Datasets"):
+                st.write("Combine uploaded datasets into master course catalog")
+                if st.button("Merge All Datasets"):
+                    try:
+                        merged_df = merge_platform_datasets()
+                        st.session_state['course_data'] = merged_df
+                        st.success(f"Merged {len(merged_df)} courses into master catalog!")
+                    except Exception as e:
+                        st.error(f"Merge failed: {str(e)}")
+    with tab2:
+      st.subheader("User Management")
         users_df = pd.DataFrame.from_dict(st.session_state['users'], orient='index')
         st.dataframe(users_df)
         
@@ -155,33 +202,7 @@ def admin_panel():
                         'progress': {},
                         'preferences': {}
                     }
-                    st.success("User added successfully!")
-    
-    with tab2:
-        st.subheader("Content Management")
-        if not st.session_state['course_data'].empty:
-            st.dataframe(st.session_state['course_data'])
-        
-        with st.expander("Add Course Manually"):
-            with st.form("add_course_form"):
-                name = st.text_input("Course Name")
-                difficulty = st.selectbox("Difficulty Level", ["Beginner", "Intermediate", "Advanced"])
-                description = st.text_area("Description")
-                skills = st.text_input("Skills (comma separated)")
-                rating = st.slider("Rating", 1.0, 5.0, 4.0)
-                url = st.text_input("Course URL")
-                
-                if st.form_submit_button("Add Course"):
-                    new_course = {
-                        'Course Name': name,
-                        'Difficulty Level': difficulty,
-                        'Course Description': description,
-                        'Skills': skills,
-                        'Ratings': rating,
-                        'Course URL': url
-                    }
-                    st.session_state['course_data'] = st.session_state['course_data'].append(new_course, ignore_index=True)
-                    st.success("Course added successfully!")
+                    st.success("User added successfully!")  
     
     with tab3:
         st.subheader("Analytics Dashboard")
@@ -192,11 +213,40 @@ def admin_panel():
             fig2 = px.scatter(st.session_state['course_data'], x="Ratings", y="Difficulty Level", 
                              color="Difficulty Level", title="Ratings by Difficulty Level")
             st.plotly_chart(fig2)
+
+def merge_platform_datasets():
+    """Combine Udemy and Coursera datasets into standardized format"""
+    udemy_df = st.session_state['platform_datasets']['udemy']
+    coursera_df = st.session_state['platform_datasets']['coursera']
     
-    with tab4:
-        st.subheader("System Settings")
-        st.session_state['voice_enabled'] = st.checkbox("Enable Voice Assistant Globally", value=st.session_state['voice_enabled'])
-        st.info("System version: 2.1.0")
+    merged = pd.DataFrame()
+    
+    if not udemy_df.empty:
+        udemy_processed = udemy_df.rename(columns={
+            'course_title': 'Course Name',
+            'url': 'Course URL',
+            'avg_rating': 'Ratings',
+            'num_subscribers': 'Enrollments'
+        })
+        udemy_processed['Platform'] = 'Udemy'
+        udemy_processed['Difficulty Level'] = 'Intermediate'  # Udemy typically doesn't provide this
+        merged = pd.concat([merged, udemy_processed])
+    
+    if not coursera_df.empty:
+        coursera_processed = coursera_df.rename(columns={
+            'course_name': 'Course Name',
+            'course_url': 'Course URL',
+            'course_rating': 'Ratings',
+            'course_difficulty': 'Difficulty Level'
+        })
+        coursera_processed['Platform'] = 'Coursera'
+        coursera_processed['Enrollments'] = 0  # Coursera typically doesn't provide this
+        merged = pd.concat([merged, coursera_processed])
+    
+    # Standardize columns
+    final_cols = ['Course Name', 'Platform', 'Difficulty Level', 'Ratings', 'Course URL', 'Enrollments']
+    return merged[final_cols] if not merged.empty else pd.DataFrame(columns=final_cols)
+
 
 # Voice assistant functions
 def text_to_speech(text):
@@ -596,13 +646,13 @@ def main():
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🎯 Find Courses"):
-                st.experimental_rerun()
+                st.rerun()
         with col2:
             if st.button("📚 Create Learning Path"):
-                st.experimental_rerun()
+                st.rerun()
         with col3:
             if st.button("💬 Chat with Assistant"):
-                st.experimental_rerun()
+                st.rerun()
     
     elif choice == "Admin Panel" and st.session_state['logged_in'] == "admin":
         admin_panel()
