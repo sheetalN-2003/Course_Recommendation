@@ -1,6 +1,6 @@
+import streamlit as st
 import asyncio
 import torch
-import streamlit as st
 import pandas as pd
 import numpy as np
 import re
