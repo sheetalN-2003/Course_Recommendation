@@ -1,38 +1,5 @@
 import asyncio
 import torch
-
-# ======================
-# WORKAROUNDS & FIXES
-# ======================
-# Torch workaround for Streamlit source watcher
-if hasattr(torch._classes, '__path__'):
-    torch._classes.__path__ = []
-
-# Event loop workaround
-if not hasattr(asyncio, '_get_running_loop'):
-    asyncio._get_running_loop = asyncio.get_running_loop
-
-# Add this at the top of your file
-from transformers import set_seed
-set_seed(42)  # For reproducibility
-
-# Initialize all required session state variables
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = True
-    st.session_state.users = {
-        'admin': {'password': 'admin123', 'role': 'admin', 'progress': {}, 'preferences': {}}
-    }
-    st.session_state.logged_in = None
-    st.session_state.course_data = pd.DataFrame()
-    st.session_state.platform_datasets = {
-        'udemy': pd.DataFrame(),
-        'coursera': pd.DataFrame()
-    }
-    st.session_state.messages = []
-    st.session_state.learning_paths = {}
-    st.session_state.voice_enabled = False
-    st.session_state.assistant_active = False
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -56,12 +23,22 @@ import base64
 import io
 import requests
 from bs4 import BeautifulSoup
-from transformers import pipeline
+from transformers import pipeline, set_seed
 from streamlit_webrtc import webrtc_streamer
 
-def voice_input():
-    webrtc_streamer(key="voice-input")
-    # Add processing logic for the audio stream
+# ======================
+# WORKAROUNDS & FIXES
+# ======================
+# Torch workaround for Streamlit source watcher
+if hasattr(torch._classes, '__path__'):
+    torch._classes.__path__ = []
+
+# Event loop workaround
+if not hasattr(asyncio, '_get_running_loop'):
+    asyncio._get_running_loop = asyncio.get_running_loop
+
+# Set seed for reproducibility
+set_seed(42)
 
 # Initialize NLTK
 nltk.download('punkt')
@@ -71,31 +48,35 @@ nltk.download('wordnet')
 # Initialize components
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
-sentiment_analyzer = pipeline("sentiment-analysis")
+
+# Initialize sentiment analyzer with error handling
+try:
+    sentiment_analyzer = pipeline(
+        "sentiment-analysis",
+        model="distilbert-base-uncased-finetuned-sst-2-english",
+        device=-1,  # Use CPU
+        use_auth_token=False
+    )
+except Exception as e:
+    st.warning(f"Could not load sentiment analyzer: {str(e)}")
+    sentiment_analyzer = None
 
 # Initialize session state
-def init_session_state():
-    if 'users' not in st.session_state:
-        st.session_state['users'] = {
-            'admin': {'password': 'admin123', 'role': 'admin', 'progress': {}, 'preferences': {}}
-        }
-    if 'logged_in' not in st.session_state:
-        st.session_state['logged_in'] = None
-    if 'course_data' not in st.session_state:
-        st.session_state['course_data'] = pd.DataFrame()
-    if 'platform_datasets' not in st.session_state:
-        st.session_state['platform_datasets'] = {
-            'udemy': pd.DataFrame(),
-            'coursera': pd.DataFrame()
-        }
-    if 'messages' not in st.session_state:
-        st.session_state.messages = []
-    if 'learning_paths' not in st.session_state:
-        st.session_state.learning_paths = {}
-    if 'voice_enabled' not in st.session_state:
-        st.session_state.voice_enabled = False
-    if 'assistant_active' not in st.session_state:
-        st.session_state.assistant_active = False
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    st.session_state.users = {
+        'admin': {'password': 'admin123', 'role': 'admin', 'progress': {}, 'preferences': {}}
+    }
+    st.session_state.logged_in = None
+    st.session_state.course_data = pd.DataFrame()
+    st.session_state.platform_datasets = {
+        'udemy': pd.DataFrame(),
+        'coursera': pd.DataFrame()
+    }
+    st.session_state.messages = []
+    st.session_state.learning_paths = {}
+    st.session_state.voice_enabled = False
+    st.session_state.assistant_active = False
 
 # Enhanced text preprocessing
 def preprocess_text(text):
@@ -118,10 +99,10 @@ def register():
         if submitted:
             if new_password != confirm_password:
                 st.error("Passwords don't match!")
-            elif new_username in st.session_state['users']:
+            elif new_username in st.session_state.users:
                 st.warning("Username already exists!")
             else:
-                st.session_state['users'][new_username] = {
+                st.session_state.users[new_username] = {
                     'password': new_password,
                     'role': role,
                     'progress': {},
@@ -129,6 +110,8 @@ def register():
                     'joined_date': datetime.now().strftime("%Y-%m-%d")
                 }
                 st.success("Registration successful! You can now log in.")
+                time.sleep(1)
+                st.rerun()
 
 def login():
     st.subheader("Login")
@@ -138,8 +121,8 @@ def login():
         submitted = st.form_submit_button("Login")
         
         if submitted:
-            if username in st.session_state['users'] and st.session_state['users'][username]['password'] == password:
-                st.session_state['logged_in'] = username
+            if username in st.session_state.users and st.session_state.users[username]['password'] == password:
+                st.session_state.logged_in = username
                 st.success(f"Welcome back, {username}!")
                 time.sleep(1)
                 st.rerun()
@@ -147,7 +130,7 @@ def login():
                 st.error("Invalid credentials!")
 
 def logout():
-    st.session_state['logged_in'] = None
+    st.session_state.logged_in = None
     st.success("Logged out successfully.")
     time.sleep(1)
     st.rerun()
@@ -215,9 +198,10 @@ def admin_panel():
                             st.success(f"Merged {len(merged_df)} courses into master catalog!")
                         except Exception as e:
                             st.error(f"Merge failed: {str(e)}")
+
     with tab2:
         st.subheader("User Management")
-        users_df = pd.DataFrame.from_dict(st.session_state['users'], orient='index')
+        users_df = pd.DataFrame.from_dict(st.session_state.users, orient='index')
         st.dataframe(users_df)
         
         with st.expander("Add New User"):
@@ -226,7 +210,7 @@ def admin_panel():
                 new_password = st.text_input("Password", type="password")
                 user_role = st.selectbox("Role", ["admin", "learner", "educator"])
                 if st.form_submit_button("Add User"):
-                    st.session_state['users'][new_username] = {
+                    st.session_state.users[new_username] = {
                         'password': new_password,
                         'role': user_role,
                         'progress': {},
@@ -236,14 +220,14 @@ def admin_panel():
     
     with tab3:
         st.subheader("System Analytics")
-        if not st.session_state['course_data'].empty:
+        if not st.session_state.course_data.empty:
             st.write("Course Data Overview")
-            st.dataframe(st.session_state['course_data'].describe())
+            st.dataframe(st.session_state.course_data.describe())
 
 def merge_platform_datasets():
     """Combine Udemy and Coursera datasets into standardized format"""
-    udemy_df = st.session_state['platform_datasets']['udemy']
-    coursera_df = st.session_state['platform_datasets']['coursera']
+    udemy_df = st.session_state.platform_datasets['udemy']
+    coursera_df = st.session_state.platform_datasets['coursera']
     
     merged = pd.DataFrame()
     
@@ -273,26 +257,32 @@ def merge_platform_datasets():
     final_cols = ['Course Name', 'Platform', 'Difficulty Level', 'Ratings', 'Course URL', 'Enrollments']
     return merged[final_cols] if not merged.empty else pd.DataFrame(columns=final_cols)
 
-
 # Voice assistant functions
 def text_to_speech(text):
-    tts = gTTS(text=text, lang='en')
-    audio_file = io.BytesIO()
-    tts.write_to_fp(audio_file)
-    audio_file.seek(0)
-    st.audio(audio_file, format='audio/mp3')
+    try:
+        tts = gTTS(text=text, lang='en')
+        audio_file = io.BytesIO()
+        tts.write_to_fp(audio_file)
+        audio_file.seek(0)
+        st.audio(audio_file, format='audio/mp3')
+    except Exception as e:
+        st.warning(f"Text-to-speech error: {str(e)}")
 
 def speech_to_text():
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("Listening... Speak now")
-        audio = r.listen(source)
-        try:
+    try:
+        r = sr.Recognizer()
+        with sr.Microphone() as source:
+            st.info("Listening... Speak now")
+            audio = r.listen(source)
             text = r.recognize_google(audio)
             return text
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-            return None
+    except Exception as e:
+        st.error(f"Speech recognition error: {str(e)}")
+        return None
+
+def voice_input():
+    webrtc_streamer(key="voice-input")
+    # Add processing logic for the audio stream
 
 # Enhanced course recommendation with multiple strategies
 def recommend_courses(df, query, num_recommendations=5, strategy="content_based"):
@@ -358,7 +348,7 @@ def chatbot_interface(df):
     col1, col2 = st.columns([3, 1])
     with col2:
         if st.button("🎙️ Start Voice Assistant"):
-            st.session_state['assistant_active'] = True
+            st.session_state.assistant_active = True
             user_input = speech_to_text()
             if user_input:
                 st.session_state.messages.append({"content": user_input, "is_user": True})
@@ -369,7 +359,7 @@ def chatbot_interface(df):
         message(msg['content'], is_user=msg['is_user'], key=f"msg_{i}")
         
         # Add voice for assistant responses
-        if not msg['is_user'] and st.session_state['voice_enabled']:
+        if not msg['is_user'] and st.session_state.voice_enabled:
             text_to_speech(msg['content'])
     
     # Text input
@@ -379,26 +369,9 @@ def chatbot_interface(df):
         process_chat_query(df, user_input)
 
 def process_chat_query(df, query):
-    # Analyze sentiment
-    sentiment = sentiment_analyzer(query)[0]
-    sentiment_analyzer = pipeline(
-    "sentiment-analysis",
-    model="distilbert-base-uncased-finetuned-sst-2-english",
-    device=-1,  # Use CPU
-    use_auth_token=False  # If you're not using private models
-)
-    # Replace the sentiment analyzer initialization with this more robust version:
-try:
-    sentiment_analyzer = pipeline("sentiment-analysis", 
-                                 model="distilbert-base-uncased-finetuned-sst-2-english",
-                                 device=-1)  # Use CPU
-except Exception as e:
-    st.warning(f"Could not load sentiment analyzer: {str(e)}")
-    sentiment_analyzer = None
-    
     # Generate response based on query
     if any(word in query.lower() for word in ["hi", "hello", "hey"]):
-        response = f"Hello {st.session_state['logged_in']}! How can I help you with your learning today?"
+        response = f"Hello {st.session_state.logged_in}! How can I help you with your learning today?"
     elif any(word in query.lower() for word in ["thank", "thanks"]):
         response = "You're welcome! Is there anything else I can help you with?"
     elif any(word in query.lower() for word in ["course", "learn", "study", "recommend"]):
@@ -466,7 +439,7 @@ def display_learning_path(path_id):
             
             if st.button(f"Mark as Completed", key=f"complete_{path_id}_{i}"):
                 path['progress'] = min(100, path['progress'] + (100 / len(path['courses'])))
-                st.experimental_rerun()
+                st.rerun()
 
 # Enhanced quiz recommendation
 def quiz_recommendation(df):
@@ -522,8 +495,8 @@ def quiz_recommendation(df):
 def gamification():
     st.subheader("Your Learning Journey")
     
-    if st.session_state['logged_in']:
-        user = st.session_state['users'][st.session_state['logged_in']]
+    if st.session_state.logged_in:
+        user = st.session_state.users[st.session_state.logged_in]
         
         # Initialize progress if not exists
         if 'progress' not in user:
@@ -596,8 +569,8 @@ def course_marketplace(df):
                 
                 # Simulate enrollment
                 if st.button("Add to My Learning", key=f"enroll_{row['Course Name']}"):
-                    if st.session_state['logged_in']:
-                        user = st.session_state['users'][st.session_state['logged_in']]
+                    if st.session_state.logged_in:
+                        user = st.session_state.users[st.session_state.logged_in]
                         if 'progress' not in user:
                             user['progress'] = {}
                         user['progress'][row['Course Name']] = 0
@@ -610,15 +583,15 @@ def course_marketplace(df):
 # Data loading with caching
 @st.cache_data(ttl=3600)
 def load_data():
-    if not st.session_state['course_data'].empty:
-        return st.session_state['course_data']
+    if not st.session_state.course_data.empty:
+        return st.session_state.course_data
     
     # Try to load sample data if no data uploaded
     try:
         sample_data = pd.read_csv("https://raw.githubusercontent.com/example/course-data/main/sample_courses.csv")
         sample_data['tags'] = sample_data[['Course Name', 'Difficulty Level', 'Course Description', 'Skills']].apply(lambda x: ' '.join(x.astype(str)), axis=1)
         sample_data['tags'] = sample_data['tags'].apply(preprocess_text)
-        st.session_state['course_data'] = sample_data
+        st.session_state.course_data = sample_data
         return sample_data
     except:
         return pd.DataFrame()
@@ -638,10 +611,10 @@ def main():
     # Sidebar navigation
     st.sidebar.title("Navigation")
     
-    if not st.session_state['logged_in']:
+    if not st.session_state.logged_in:
         menu = ["Home", "Login", "Register"]
     else:
-        if st.session_state['users'][st.session_state['logged_in']]['role'] == "admin":
+        if st.session_state.users[st.session_state.logged_in]['role'] == "admin":
             menu = ["Dashboard", "Admin Panel", "Marketplace", "Learning Paths", "Chat Assistant", "My Progress", "Logout"]
         else:
             menu = ["Dashboard", "Marketplace", "Learning Paths", "Chat Assistant", "My Progress", "Logout"]
@@ -657,7 +630,7 @@ def main():
         """)
         
         if st.button("Explore as Guest"):
-            st.session_state['logged_in'] = "guest"
+            st.session_state.logged_in = "guest"
             st.rerun()
     
     elif choice == "Login":
@@ -666,8 +639,8 @@ def main():
     elif choice == "Register":
         register()
     
-    elif choice == "Dashboard" and st.session_state['logged_in']:
-        st.title(f"Welcome, {st.session_state['logged_in']}!")
+    elif choice == "Dashboard" and st.session_state.logged_in:
+        st.title(f"Welcome, {st.session_state.logged_in}!")
         
         if not df.empty:
             st.subheader("Recommended For You")
@@ -694,13 +667,13 @@ def main():
             if st.button("💬 Chat with Assistant"):
                 st.rerun()
     
-    elif choice == "Admin Panel" and st.session_state['logged_in'] == "admin":
+    elif choice == "Admin Panel" and st.session_state.logged_in == "admin":
         admin_panel()
     
-    elif choice == "Marketplace" and st.session_state['logged_in']:
+    elif choice == "Marketplace" and st.session_state.logged_in:
         course_marketplace(df)
     
-    elif choice == "Learning Paths" and st.session_state['logged_in']:
+    elif choice == "Learning Paths" and st.session_state.logged_in:
         tab1, tab2 = st.tabs(["My Paths", "Create New"])
         
         with tab1:
@@ -713,13 +686,13 @@ def main():
         with tab2:
             create_learning_path(df)
     
-    elif choice == "Chat Assistant" and st.session_state['logged_in']:
+    elif choice == "Chat Assistant" and st.session_state.logged_in:
         chatbot_interface(df)
     
-    elif choice == "My Progress" and st.session_state['logged_in']:
+    elif choice == "My Progress" and st.session_state.logged_in:
         gamification()
     
-    elif choice == "Logout" and st.session_state['logged_in']:
+    elif choice == "Logout" and st.session_state.logged_in:
         logout()
     
     # Footer
