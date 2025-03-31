@@ -118,7 +118,7 @@ def login():
                 st.session_state['logged_in'] = username
                 st.success(f"Welcome back, {username}!")
                 time.sleep(1)
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials!")
 
@@ -126,7 +126,7 @@ def logout():
     st.session_state['logged_in'] = None
     st.success("Logged out successfully.")
     time.sleep(1)
-    st.experimental_rerun()
+    st.rerun()
 
 # Admin panel with enhanced features
 def admin_panel():
