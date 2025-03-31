@@ -609,13 +609,6 @@ def load_data():
 
 # Main application
 def main():
-    st.set_page_config(
-        page_title="AI Learning Platform",
-        page_icon="🎓",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-    
     # Load data
     df = load_data()
     
