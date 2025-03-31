@@ -568,7 +568,7 @@ def main():
         
         if st.button("Explore as Guest"):
             st.session_state['logged_in'] = "guest"
-            st.experimental_rerun()
+            st.rerun()
     
     elif choice == "Login":
         login()
