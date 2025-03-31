@@ -1,3 +1,17 @@
+import asyncio
+import torch
+
+# ======================
+# WORKAROUNDS & FIXES
+# ======================
+# Torch workaround for Streamlit source watcher
+if hasattr(torch._classes, '__path__'):
+    torch._classes.__path__ = []
+
+# Event loop workaround
+if not hasattr(asyncio, '_get_running_loop'):
+    asyncio._get_running_loop = asyncio.get_running_loop
+
 import streamlit as st
 import pandas as pd
 import numpy as np
