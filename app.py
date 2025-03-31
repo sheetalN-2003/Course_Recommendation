@@ -20,6 +20,12 @@ nltk.download('wordnet')
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
 
+# Initialize session state for authentication
+if 'users' not in st.session_state:
+    st.session_state['users'] = {'admin': {'password': 'admin123', 'role': 'admin'}}
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = None
+
 # Function to preprocess text
 def preprocess_text(text):
     text = text.lower()
@@ -27,6 +33,43 @@ def preprocess_text(text):
     words = word_tokenize(text)
     words = [lemmatizer.lemmatize(word) for word in words if word not in stop_words]
     return ' '.join(words)
+
+# Function to register users
+def register():
+    st.subheader("Register New User")
+    new_username = st.text_input("Enter Username")
+    new_password = st.text_input("Enter Password", type="password")
+    if st.button("Register"):
+        if new_username in st.session_state['users']:
+            st.warning("Username already exists!")
+        else:
+            st.session_state['users'][new_username] = {'password': new_password, 'role': 'user'}
+            st.success("Registration successful! You can now log in.")
+
+# Function to authenticate users
+def login():
+    st.subheader("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if username in st.session_state['users'] and st.session_state['users'][username]['password'] == password:
+            st.session_state['logged_in'] = username
+            st.success(f"Welcome, {username}!")
+        else:
+            st.error("Invalid credentials!")
+
+# Function to logout
+def logout():
+    st.session_state['logged_in'] = None
+    st.success("Logged out successfully.")
+
+# Function to check admin access
+def admin_panel():
+    st.subheader("Admin Panel")
+    if st.session_state['logged_in'] == 'admin':
+        st.success("Welcome, Admin!")
+    else:
+        st.error("Access Denied: Admins only!")
 
 # Function to load course data
 def load_data():
@@ -59,7 +102,7 @@ def recommend_courses(df, query, num_recommendations=5):
     } for i, score in similar_courses]
     return recommendations
 
-# Quiz for personalized course recommendations
+# Function for quiz-based course recommendations
 def quiz_recommendation(df):
     st.subheader("Course Recommendation Quiz")
     interests = st.multiselect("Select your areas of interest:", df['Skills'].explode().unique())
@@ -72,12 +115,6 @@ def quiz_recommendation(df):
                 st.markdown(f"- [{row['Course Name']}]({row['Course URL']}) (Rating: {row['Ratings']})")
         else:
             st.write("No matching courses found.")
-
-# Voice Assistant Function
-def speak(text):
-    tts = gTTS(text=text, lang='en')
-    tts.save("response.mp3")
-    os.system("mpg321 response.mp3")
 
 # Gamification: Simple quiz-based rewards
 def gamification():
@@ -96,7 +133,7 @@ def gamification():
         else:
             st.warning("Keep learning! Here are some beginner-friendly courses.")
 
-# Chatbot
+# Chatbot function
 def chatbot_interface(df):
     st.header("AI Course Recommendation Chatbot")
     if 'messages' not in st.session_state:
@@ -114,24 +151,28 @@ def chatbot_interface(df):
             bot_response = "Sorry, no matching courses found."
         st.session_state.messages.append({"content": bot_response, "is_user": False})
         message(bot_response, is_user=False)
-        speak(bot_response)
 
 # Main function
 def main():
     st.set_page_config(page_title="AI Course Recommender", layout="wide")
     menu = ["Home", "Register", "Login", "Admin", "User"]
     choice = st.sidebar.selectbox("Menu", menu)
+    
     if choice == "Home":
         st.title("Welcome to the AI Course Recommendation System")
+    elif choice == "Register":
+        register()
+    elif choice == "Login":
+        login()
+    elif choice == "Admin":
+        admin_panel()
     elif choice == "User":
         df = load_data()
-        if not df.empty:
-            chatbot_interface(df)
-            quiz_recommendation(df)
-            gamification()
+        chatbot_interface(df)
+        quiz_recommendation(df)
+        gamification()
     if st.sidebar.button("Logout"):
-        st.session_state['logged_in'] = None
-        st.success("Logged out successfully.")
+        logout()
 
 if __name__ == "__main__":
     main()
