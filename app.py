@@ -1,6 +1,16 @@
-import streamlit as st
 import asyncio
 import torch
+import streamlit as st
+
+# Set page config FIRST - this must be the first Streamlit command
+st.set_page_config(
+    page_title="AI Learning Platform",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Now import other dependencies
 import pandas as pd
 import numpy as np
 import re
