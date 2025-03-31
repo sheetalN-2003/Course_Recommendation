@@ -13,4 +13,4 @@ requests
 beautifulsoup4
 streamlit-chat
 python-dotenv
-pyAudio
+streamlit-webrtc==0.44.4
