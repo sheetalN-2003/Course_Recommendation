@@ -16,14 +16,6 @@ if not hasattr(asyncio, '_get_running_loop'):
 from transformers import set_seed
 set_seed(42)  # For reproducibility
 
-# And modify your pipeline initialization:
-sentiment_analyzer = pipeline(
-    "sentiment-analysis",
-    model="distilbert-base-uncased-finetuned-sst-2-english",
-    device=-1,  # Use CPU
-    use_auth_token=False  # If you're not using private models
-)
-
 # Initialize all required session state variables
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
@@ -389,6 +381,12 @@ def chatbot_interface(df):
 def process_chat_query(df, query):
     # Analyze sentiment
     sentiment = sentiment_analyzer(query)[0]
+    sentiment_analyzer = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english",
+    device=-1,  # Use CPU
+    use_auth_token=False  # If you're not using private models
+)
     # Replace the sentiment analyzer initialization with this more robust version:
 try:
     sentiment_analyzer = pipeline("sentiment-analysis", 
