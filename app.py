@@ -129,7 +129,6 @@ def logout():
     st.rerun()
 
 # Admin panel with enhanced features
-
     def admin_panel():
     if st.session_state['logged_in'] != 'admin':
         st.error("Access Denied: Admins only!")
@@ -185,8 +184,9 @@ def logout():
                         st.success(f"Merged {len(merged_df)} courses into master catalog!")
                     except Exception as e:
                         st.error(f"Merge failed: {str(e)}")
+
     with tab2:
-      st.subheader("User Management")
+        st.subheader("User Management")
         users_df = pd.DataFrame.from_dict(st.session_state['users'], orient='index')
         st.dataframe(users_df)
         
@@ -202,17 +202,13 @@ def logout():
                         'progress': {},
                         'preferences': {}
                     }
-                    st.success("User added successfully!")  
+                    st.success("User added successfully!")
     
     with tab3:
-        st.subheader("Analytics Dashboard")
+        st.subheader("System Analytics")
         if not st.session_state['course_data'].empty:
-            fig1 = px.histogram(st.session_state['course_data'], x="Difficulty Level", title="Course Difficulty Distribution")
-            st.plotly_chart(fig1)
-            
-            fig2 = px.scatter(st.session_state['course_data'], x="Ratings", y="Difficulty Level", 
-                             color="Difficulty Level", title="Ratings by Difficulty Level")
-            st.plotly_chart(fig2)
+            st.write("Course Data Overview")
+            st.dataframe(st.session_state['course_data'].describe())
 
 def merge_platform_datasets():
     """Combine Udemy and Coursera datasets into standardized format"""
