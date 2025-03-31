@@ -62,6 +62,11 @@ def init_session_state():
         st.session_state['logged_in'] = None
     if 'course_data' not in st.session_state:
         st.session_state['course_data'] = pd.DataFrame()
+    if 'platform_datasets' not in st.session_state:
+        st.session_state['platform_datasets'] = {
+            'udemy': pd.DataFrame(),
+            'coursera': pd.DataFrame()
+        }
     if 'messages' not in st.session_state:
         st.session_state.messages = []
     if 'learning_paths' not in st.session_state:
@@ -70,9 +75,6 @@ def init_session_state():
         st.session_state.voice_enabled = False
     if 'assistant_active' not in st.session_state:
         st.session_state.assistant_active = False
-
-init_session_state()
-
 # Enhanced text preprocessing
 def preprocess_text(text):
     text = text.lower()
@@ -173,18 +175,24 @@ def admin_panel():
                 except Exception as e:
                     st.error(f"Error loading Coursera data: {str(e)}")
         
-        # Dataset Merging
-        if not st.session_state['platform_datasets']['udemy'].empty or not st.session_state['platform_datasets']['coursera'].empty:
-            with st.expander("Merge Datasets"):
-                st.write("Combine uploaded datasets into master course catalog")
-                if st.button("Merge All Datasets"):
-                    try:
-                        merged_df = merge_platform_datasets()
-                        st.session_state['course_data'] = merged_df
-                        st.success(f"Merged {len(merged_df)} courses into master catalog!")
-                    except Exception as e:
-                        st.error(f"Merge failed: {str(e)}")
-
+        # Dataset Merging - SAFE CHECK
+        if ('platform_datasets' in st.session_state and 
+            ('udemy' in st.session_state['platform_datasets'] or 
+             'coursera' in st.session_state['platform_datasets'])):
+            
+            udemy_empty = st.session_state['platform_datasets']['udemy'].empty
+            coursera_empty = st.session_state['platform_datasets']['coursera'].empty
+            
+            if not udemy_empty or not coursera_empty:
+                with st.expander("Merge Datasets"):
+                    st.write("Combine uploaded datasets into master course catalog")
+                    if st.button("Merge All Datasets"):
+                        try:
+                            merged_df = merge_platform_datasets()
+                            st.session_state['course_data'] = merged_df
+                            st.success(f"Merged {len(merged_df)} courses into master catalog!")
+                        except Exception as e:
+                            st.error(f"Merge failed: {str(e)}")
     with tab2:
         st.subheader("User Management")
         users_df = pd.DataFrame.from_dict(st.session_state['users'], orient='index')
