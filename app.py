@@ -12,6 +12,35 @@ if hasattr(torch._classes, '__path__'):
 if not hasattr(asyncio, '_get_running_loop'):
     asyncio._get_running_loop = asyncio.get_running_loop
 
+# Add this at the top of your file
+from transformers import set_seed
+set_seed(42)  # For reproducibility
+
+# And modify your pipeline initialization:
+sentiment_analyzer = pipeline(
+    "sentiment-analysis",
+    model="distilbert-base-uncased-finetuned-sst-2-english",
+    device=-1,  # Use CPU
+    use_auth_token=False  # If you're not using private models
+)
+
+# Initialize all required session state variables
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    st.session_state.users = {
+        'admin': {'password': 'admin123', 'role': 'admin', 'progress': {}, 'preferences': {}}
+    }
+    st.session_state.logged_in = None
+    st.session_state.course_data = pd.DataFrame()
+    st.session_state.platform_datasets = {
+        'udemy': pd.DataFrame(),
+        'coursera': pd.DataFrame()
+    }
+    st.session_state.messages = []
+    st.session_state.learning_paths = {}
+    st.session_state.voice_enabled = False
+    st.session_state.assistant_active = False
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -75,6 +104,7 @@ def init_session_state():
         st.session_state.voice_enabled = False
     if 'assistant_active' not in st.session_state:
         st.session_state.assistant_active = False
+
 # Enhanced text preprocessing
 def preprocess_text(text):
     text = text.lower()
@@ -132,7 +162,7 @@ def logout():
 
 # Admin panel with enhanced features
 def admin_panel():
-    if st.session_state['logged_in'] != 'admin':
+    if st.session_state.get('logged_in') != 'admin':
         st.error("Access Denied: Admins only!")
         return
     
@@ -151,7 +181,7 @@ def admin_panel():
                     udemy_df = pd.read_csv(udemy_file)
                     required_cols = ['course_title', 'url', 'price', 'num_subscribers', 'avg_rating']
                     if all(col in udemy_df.columns for col in required_cols):
-                        st.session_state['platform_datasets']['udemy'] = udemy_df
+                        st.session_state.platform_datasets['udemy'] = udemy_df
                         st.success("Udemy dataset uploaded successfully!")
                         st.dataframe(udemy_df.head(3))
                     else:
@@ -167,7 +197,7 @@ def admin_panel():
                     coursera_df = pd.read_csv(coursera_file)
                     required_cols = ['course_name', 'course_url', 'course_rating', 'course_difficulty']
                     if all(col in coursera_df.columns for col in required_cols):
-                        st.session_state['platform_datasets']['coursera'] = coursera_df
+                        st.session_state.platform_datasets['coursera'] = coursera_df
                         st.success("Coursera dataset uploaded successfully!")
                         st.dataframe(coursera_df.head(3))
                     else:
@@ -175,13 +205,13 @@ def admin_panel():
                 except Exception as e:
                     st.error(f"Error loading Coursera data: {str(e)}")
         
-        # Dataset Merging - SAFE CHECK
+        # Dataset Merging - with proper checks
         if ('platform_datasets' in st.session_state and 
-            ('udemy' in st.session_state['platform_datasets'] or 
-             'coursera' in st.session_state['platform_datasets'])):
+            ('udemy' in st.session_state.platform_datasets or 
+             'coursera' in st.session_state.platform_datasets)):
             
-            udemy_empty = st.session_state['platform_datasets']['udemy'].empty
-            coursera_empty = st.session_state['platform_datasets']['coursera'].empty
+            udemy_empty = st.session_state.platform_datasets['udemy'].empty
+            coursera_empty = st.session_state.platform_datasets['coursera'].empty
             
             if not udemy_empty or not coursera_empty:
                 with st.expander("Merge Datasets"):
@@ -189,7 +219,7 @@ def admin_panel():
                     if st.button("Merge All Datasets"):
                         try:
                             merged_df = merge_platform_datasets()
-                            st.session_state['course_data'] = merged_df
+                            st.session_state.course_data = merged_df
                             st.success(f"Merged {len(merged_df)} courses into master catalog!")
                         except Exception as e:
                             st.error(f"Merge failed: {str(e)}")
@@ -359,6 +389,14 @@ def chatbot_interface(df):
 def process_chat_query(df, query):
     # Analyze sentiment
     sentiment = sentiment_analyzer(query)[0]
+    # Replace the sentiment analyzer initialization with this more robust version:
+try:
+    sentiment_analyzer = pipeline("sentiment-analysis", 
+                                 model="distilbert-base-uncased-finetuned-sst-2-english",
+                                 device=-1)  # Use CPU
+except Exception as e:
+    st.warning(f"Could not load sentiment analyzer: {str(e)}")
+    sentiment_analyzer = None
     
     # Generate response based on query
     if any(word in query.lower() for word in ["hi", "hello", "hey"]):
