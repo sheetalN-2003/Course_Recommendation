@@ -129,7 +129,7 @@ def logout():
     st.rerun()
 
 # Admin panel with enhanced features
-    def admin_panel():
+def admin_panel():
     if st.session_state['logged_in'] != 'admin':
         st.error("Access Denied: Admins only!")
         return
