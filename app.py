@@ -867,79 +867,79 @@ def coding_challenge_game():
     user_code = st.text_area("Write your solution here:", height=200,
                            value="def solution(input):\n    # Your code here\n    return None")
     
-if st.button("Submit Solution"):
-    try:
-        namespace = {}
-        exec(user_code, namespace)
+  if st.button("Submit Solution"):
+      try:
+          namespace = {}
+          exec(user_code, namespace)
     
-        if 'solution' not in namespace:
-            st.error("Please define a function named 'solution'")
-            return
+          if 'solution' not in namespace:
+              st.error("Please define a function named 'solution'")
+              return
     
-        user_func = namespace['solution']
-        passed = 0
-        results = []
+          user_func = namespace['solution']
+          passed = 0
+          results = []
         
-        for input_case, expected in challenge['test_cases']:
-            try:
-                result = user_func(input_case)
-                is_correct = result == expected
-                if is_correct:
-                    passed += 1
-                results.append({
-                    'input': input_case,
-                    'output': result,
-                    'expected': expected,
-                    'correct': is_correct
-                })
-            except Exception as e:
-                results.append({
-                    'input': input_case,
-                    'output': f"Error: {str(e)}",
-                    'expected': expected,
-                    'correct': False
-                })
+          for input_case, expected in challenge['test_cases']:
+              try:
+                  result = user_func(input_case)
+                  is_correct = result == expected
+                  if is_correct:
+                      passed += 1
+                  results.append({
+                      'input': input_case,
+                      'output': result,
+                      'expected': expected,
+                      'correct': is_correct
+                  })
+              except Exception as e:
+                  results.append({
+                      'input': input_case,
+                      'output': f"Error: {str(e)}",
+                      'expected': expected,
+                      'correct': False
+                  })
         
         # Calculate and display score
-        score = int((passed / len(challenge['test_cases'])) * 100) if len(challenge['test_cases']) > 0 else 0
+          score = int((passed / len(challenge['test_cases'])) * 100) if len(challenge['test_cases']) > 0 else 0
         
-        st.write(f"### Your Score: {score}%")
+          st.write(f"### Your Score: {score}%")
         
         # Display detailed results
-        st.write("### Test Results")
-        for i, result in enumerate(results):
-            st.write(f"**Test Case {i+1}:**")
-            st.write(f"- Input: {result['input']}")
-            st.write(f"- Your Output: {result['output']}")
-            st.write(f"- Expected: {result['expected']}")
-            st.write(f"- {'✅ Passed' if result['correct'] else '❌ Failed'}")
-            st.write("---")
+          st.write("### Test Results")
+          for i, result in enumerate(results):
+              st.write(f"**Test Case {i+1}:**")
+              st.write(f"- Input: {result['input']}")
+              st.write(f"- Your Output: {result['output']}")
+              st.write(f"- Expected: {result['expected']}")
+              st.write(f"- {'✅ Passed' if result['correct'] else '❌ Failed'}")
+              st.write("---")
         
-        st.write(f"### Final Score: {score}%")
+          st.write(f"### Final Score: {score}%")
         
         # Update high scores for logged in users
-        if st.session_state.logged_in and st.session_state.logged_in != "guest":
-            username = st.session_state.logged_in
-            high_scores = st.session_state.games['coding_challenge']['high_scores']
+          if st.session_state.logged_in and st.session_state.logged_in != "guest":
+              username = st.session_state.logged_in
+              high_scores = st.session_state.games['coding_challenge']['high_scores']
             
-            if username not in high_scores or score > high_scores[username]['score']:
-                high_scores[username] = {
-                    'score': score,
-                    'date': datetime.now().strftime("%Y-%m-%d")
-                }
+              if username not in high_scores or score > high_scores[username]['score']:
+                  high_scores[username] = {
+                      'score': score,
+                      'date': datetime.now().strftime("%Y-%m-%d")
+                  }
             
             # Award points and update leaderboard
-            st.session_state.users[username]['points'] += score // 10
-            update_leaderboard(username, st.session_state.users[username]['points'])
+              st.session_state.users[username]['points'] += score // 10
+              update_leaderboard(username, st.session_state.users[username]['points'])
             
             # Award badge for perfect score
-            if score == 100:
-                award_badge(username, "coding_champion")
+              if score == 100:
+                  award_badge(username, "coding_champion")
             
-            st.success(f"You earned {score // 10} points!")
+              st.success(f"You earned {score // 10} points!")
     
-    except Exception as e:
-        st.error(f"Error in your code: {str(e)}")
+      except Exception as e:
+          st.error(f"Error in your code: {str(e)}")
 # ======================
 # COMMUNITY FORUM
 # ======================
