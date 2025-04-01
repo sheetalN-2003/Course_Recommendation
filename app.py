@@ -867,46 +867,41 @@ def coding_challenge_game():
     user_code = st.text_area("Write your solution here:", height=200,
                            value="def solution(input):\n    # Your code here\n    return None")
     
-    if st.button("Submit Solution"):
-        # Execute user code in a safe manner
-        try:
-            # Create a dictionary to capture the function
-            namespace = {}
-            exec(user_code, namespace)
-            
-            if 'solution' not in namespace:
-                st.error("Please define a function named 'solution'")
-                return
-            
-            user_func = namespace['solution']
-            
-            # Run test cases
-            passed = 0
-            results = []
-            
-            for input_case, expected in challenge['test_cases']:
-                try:
-                    result = user_func(input_case)
-                    is_correct = result == expected
-                    if is_correct:
-                        passed += 1
-                    
-                    results.append({
-                        'input': input_case,
-                        'output': result,
-                        'expected': expected,
-                        'correct': is_correct
-                    })
-                except Exception as e:
-                    results.append({
-                        'input': input_case,
-                        'output': f"Error: {str(e)}",
-                        'expected': expected,
-                        'correct': False
-                    })
-            
-            # Calculate score
-           score = int((passed / len(challenge['test_cases'])) * 100)
+       if st.button("Submit Solution"):
+    try:
+        namespace = {}
+        exec(user_code, namespace)
+        
+        if 'solution' not in namespace:
+            st.error("Please define a function named 'solution'")
+            return
+        
+        user_func = namespace['solution']
+        passed = 0
+        results = []
+        
+        for input_case, expected in challenge['test_cases']:
+            try:
+                result = user_func(input_case)
+                is_correct = result == expected
+                if is_correct:
+                    passed += 1
+                results.append({
+                    'input': input_case,
+                    'output': result,
+                    'expected': expected,
+                    'correct': is_correct
+                })
+            except Exception as e:
+                results.append({
+                    'input': input_case,
+                    'output': f"Error: {str(e)}",
+                    'expected': expected,
+                    'correct': False
+                })
+        
+        # Properly indented score calculation
+        score = int((passed / len(challenge['test_cases'])) * 100) if len(challenge['test_cases']) > 0 else 0
             
             # Display results
             st.write("### Test Results")
