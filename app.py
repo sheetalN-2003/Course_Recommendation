@@ -36,13 +36,14 @@ if 'initialized' not in st.session_state:
     # User data structure with enhanced fields
     st.session_state.users = {
         'admin': {
-            'password': 'admin123', 
-            'role': 'admin', 
-            'progress': {}, 
-            'preferences': {
-                'learning_style': 'visual',
-                'topics': ['AI', 'Programming'],
-                'difficulty': 'intermediate'
+        'password': 'admin123',
+        'role': 'admin',
+        'totp_secret': 'JBSWY3DPEHPK3PXP',  
+        'progress': {}, 
+        'preferences': {
+        'learning_style': 'visual',
+        'topics': ['AI', 'Programming'],
+        'difficulty': 'intermediate'
             },
             'joined_date': datetime.now().strftime("%Y-%m-%d"),
             'last_login': datetime.now().strftime("%Y-%m-%d %H:%M"),
