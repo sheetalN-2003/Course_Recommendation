@@ -290,7 +290,7 @@ def recommend_courses_advanced(df: pd.DataFrame, user_prefs: dict, num_recommend
         df['Category'] + " " + 
         df['Difficulty Level'] + " " + 
         df['Skills'].apply(lambda x: " ".join(x) if isinstance(x, list) else str(x))
-    
+    ) 
     # Create TF-IDF vectors
     tfidf = TfidfVectorizer(stop_words='english')
     tfidf_matrix = tfidf.fit_transform(df['feature_vector'])
