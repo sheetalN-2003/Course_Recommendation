@@ -231,44 +231,46 @@ def register():
                 time.sleep(1)
                 st.rerun()
 
+def complete_login(username):
+    st.session_state.logged_in = username
+    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    update_streak(username)
+    st.success(f"Welcome back, {username}!")
+    time.sleep(1)
+    st.rerun()
+
 def login():
     st.subheader("Login")
     login_method = st.radio("Login Method", ["Email/Password", "Google OAuth (Simulated)"])
     
     if login_method == "Email/Password":
+        # Main login form
         with st.form("login_form"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             submitted = st.form_submit_button("Login")
             
-            if submitted:
-                if (username in st.session_state.users and 
-                    st.session_state.users[username]['password'] == password):
+        # Handle form submission outside the form
+        if submitted:
+            if (username in st.session_state.users and 
+                st.session_state.users[username]['password'] == password):
+                
+                # Check for 2FA - moved outside the main form
+                if 'totp_secret' in st.session_state.users[username]:
+                    st.info("Two-factor authentication required")
+                    token = st.text_input("Enter 2FA Code", key="2fa_input")
                     
-                    # Check for 2FA
-                    if 'totp_secret' in st.session_state.users[username]:
-                        with st.form("2fa_form"):
-                            token = st.text_input("Enter 2FA Code")
-                            if st.form_submit_button("Verify"):
-                                if verify_totp(st.session_state.users[username]['totp_secret'], token):
-                                    st.session_state.logged_in = username
-                                    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                                    update_streak(username)
-                                    st.success(f"Welcome back, {username}!")
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error("Invalid 2FA code")
-                        return
-                    
-                    st.session_state.logged_in = username
-                    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    update_streak(username)
-                    st.success(f"Welcome back, {username}!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials!")
+                    if st.button("Verify"):
+                        if verify_totp(st.session_state.users[username]['totp_secret'], token):
+                            complete_login(username)
+                        else:
+                            st.error("Invalid 2FA code")
+                    return
+                
+                # No 2FA required
+                complete_login(username)
+            else:
+                st.error("Invalid credentials!")
     else:
         # Simulated Google OAuth
         if st.button("Login with Google (Simulated)"):
