@@ -407,7 +407,7 @@ def course_marketplace():
                 if st.button(f"Enroll in {course['Course Name']}", key=f"enroll_{course['Course Name']}"):
                     user = st.session_state.users[st.session_state.logged_in]
                     if course['Course Name'] not in user['progress']:
-                        user['progress'][course['Course Name'] = 0
+                        user['progress'][course['Course Name']] = 0
                         st.success("Enrolled successfully!")
                         st.rerun()
                     else:
