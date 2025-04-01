@@ -73,10 +73,17 @@ except Exception as e:
     sentiment_analyzer = None
 
 # Initialize session state
+# In your session state initialization (around line 60-80)
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.users = {
-        'admin': {'password': 'admin123', 'role': 'admin', 'progress': {}, 'preferences': {}}
+        'admin': {
+            'password': 'admin123', 
+            'role': 'admin', 
+            'progress': {}, 
+            'preferences': {},
+            'joined_date': datetime.now().strftime("%Y-%m-%d")
+        }
     }
     st.session_state.logged_in = None
     st.session_state.course_data = pd.DataFrame()
@@ -88,7 +95,6 @@ if 'initialized' not in st.session_state:
     st.session_state.learning_paths = {}
     st.session_state.voice_enabled = False
     st.session_state.assistant_active = False
-
 # Enhanced text preprocessing
 def preprocess_text(text):
     text = text.lower()
@@ -124,6 +130,12 @@ def register():
                 time.sleep(1)
                 st.rerun()
 
+def validate_user_data(username):
+    required_fields = ['password', 'role', 'progress', 'preferences']
+    if username not in st.session_state.users:
+        return False
+    return all(field in st.session_state.users[username] for field in required_fields)
+
 def login():
     st.subheader("Login")
     with st.form("login_form"):
@@ -132,8 +144,20 @@ def login():
         submitted = st.form_submit_button("Login")
         
         if submitted:
-            if username in st.session_state.users and st.session_state.users[username]['password'] == password:
+            if (username in st.session_state.users and 
+                'password' in st.session_state.users[username] and
+                st.session_state.users[username]['password'] == password):
+                
                 st.session_state.logged_in = username
+                
+                # Ensure user has all required fields
+                if 'role' not in st.session_state.users[username]:
+                    st.session_state.users[username]['role'] = "learner"
+                if 'progress' not in st.session_state.users[username]:
+                    st.session_state.users[username]['progress'] = {}
+                if 'preferences' not in st.session_state.users[username]:
+                    st.session_state.users[username]['preferences'] = {}
+                
                 st.success(f"Welcome back, {username}!")
                 time.sleep(1)
                 st.rerun()
@@ -618,10 +642,19 @@ def main():
     if not st.session_state.logged_in:
         menu = ["Home", "Login", "Register"]
     else:
-        if st.session_state.users[st.session_state.logged_in]['role'] == "admin":
-            menu = ["Dashboard", "Admin Panel", "Marketplace", "Learning Paths", "Chat Assistant", "My Progress", "Logout"]
+        # Add safety checks before accessing user role
+        if (st.session_state.logged_in in st.session_state.users and 
+            'role' in st.session_state.users[st.session_state.logged_in]):
+            
+            if st.session_state.users[st.session_state.logged_in]['role'] == "admin":
+                menu = ["Dashboard", "Admin Panel", "Marketplace", "Learning Paths", "Chat Assistant", "My Progress", "Logout"]
+            else:
+                menu = ["Dashboard", "Marketplace", "Learning Paths", "Chat Assistant", "My Progress", "Logout"]
         else:
-            menu = ["Dashboard", "Marketplace", "Learning Paths", "Chat Assistant", "My Progress", "Logout"]
+            # Handle case where user data is incomplete
+            st.error("User data incomplete. Please log in again.")
+            st.session_state.logged_in = None
+            menu = ["Home", "Login", "Register"]
     
     choice = st.sidebar.selectbox("Menu", menu)
     
