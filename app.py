@@ -906,7 +906,7 @@ def coding_challenge_game():
                     })
             
             # Calculate score
-            score = int((passed / len(challenge['test_cases'])) * 100
+           score = int((passed / len(challenge['test_cases'])) * 100)
             
             # Display results
             st.write("### Test Results")
