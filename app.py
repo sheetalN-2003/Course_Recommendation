@@ -900,7 +900,7 @@ def coding_challenge_game():
                         'correct': False
                     })
         
-         score = int((passed / len(challenge['test_cases'])) * 100) if len(challenge['test_cases']) > 0 else 0
+                score = int((passed / len(challenge['test_cases'])) * 100) if len(challenge['test_cases']) > 0 else 0
             
             # Display results
             st.write("### Test Results")
