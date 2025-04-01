@@ -95,6 +95,7 @@ if 'initialized' not in st.session_state:
     st.session_state.learning_paths = {}
     st.session_state.voice_enabled = False
     st.session_state.assistant_active = False
+
 # Enhanced text preprocessing
 def preprocess_text(text):
     text = text.lower()
@@ -102,6 +103,37 @@ def preprocess_text(text):
     words = word_tokenize(text)
     words = [lemmatizer.lemmatize(word) for word in words if word not in stop_words]
     return ' '.join(words)
+
+# Data validation function
+def validate_course_data(df):
+    required_columns = {
+        'Course Name': str,
+        'Difficulty Level': str,
+        'Ratings': (float, int),
+        'Skills': (list, str),
+        'Course URL': str
+    }
+    
+    missing = [col for col in required_columns if col not in df.columns]
+    if missing:
+        st.error(f"Missing required columns: {', '.join(missing)}")
+        return False
+    
+    return True
+
+# Data preprocessing function
+def preprocess_course_data(df):
+    # Ensure Skills column is properly formatted
+    if 'Skills' in df.columns:
+        df['Skills'] = df['Skills'].apply(
+            lambda x: [x.strip() for x in x.split(',')] if isinstance(x, str) else x if isinstance(x, list) else []
+        )
+    
+    # Ensure ratings are numeric
+    if 'Ratings' in df.columns:
+        df['Ratings'] = pd.to_numeric(df['Ratings'], errors='coerce').fillna(0)
+    
+    return df
 
 # Authentication functions
 def register():
@@ -129,12 +161,6 @@ def register():
                 st.success("Registration successful! You can now log in.")
                 time.sleep(1)
                 st.rerun()
-
-def validate_user_data(username):
-    required_fields = ['password', 'role', 'progress', 'preferences']
-    if username not in st.session_state.users:
-        return False
-    return all(field in st.session_state.users[username] for field in required_fields)
 
 def login():
     st.subheader("Login")
@@ -575,32 +601,82 @@ def gamification():
 def course_marketplace(df):
     st.subheader("Course Marketplace")
     
-    # Filters
+    # Check if DataFrame is empty or doesn't have required columns
+    if df.empty:
+        st.warning("No course data available. Please upload datasets first.")
+        return
+    
+    # Filters - with proper column existence checks
     col1, col2, col3 = st.columns(3)
     with col1:
-        difficulty = st.multiselect("Difficulty Level", 
-                                   ["Beginner", "Intermediate", "Advanced"],
-                                   default=["Beginner", "Intermediate", "Advanced"])
-    with col2:
-        min_rating = st.slider("Minimum Rating", 1.0, 5.0, 3.5)
-    with col3:
-        category = st.selectbox("Category", ["All"] + list(df['Skills'].explode().unique()))
+        # Check if 'Difficulty Level' column exists
+        if 'Difficulty Level' in df.columns:
+            difficulty_options = df['Difficulty Level'].unique()
+            difficulty = st.multiselect(
+                "Difficulty Level",
+                options=difficulty_options,
+                default=list(difficulty_options)
+            )
+        else:
+            st.warning("Difficulty data not available")
+            difficulty = []
     
-    # Apply filters
-    filtered_df = df[df['Difficulty Level'].isin(difficulty) & (df['Ratings'] >= min_rating)]
-    if category != "All":
-        filtered_df = filtered_df[filtered_df['Skills'].str.contains(category, case=False)]
+    with col2:
+        # Check if 'Ratings' column exists
+        if 'Ratings' in df.columns:
+            min_rating = st.slider(
+                "Minimum Rating", 
+                min_value=0.0, 
+                max_value=5.0, 
+                value=3.5, 
+                step=0.1
+            )
+        else:
+            st.warning("Rating data not available")
+            min_rating = 0.0
+    
+    with col3:
+        # Handle Skills column with proper checks
+        if 'Skills' in df.columns:
+            try:
+                skills_list = df['Skills'].explode().unique()
+                category = st.selectbox(
+                    "Category",
+                    ["All"] + [str(s) for s in skills_list if pd.notna(s)]
+                )
+            except:
+                st.warning("Could not process skills data")
+                category = "All"
+        else:
+            st.warning("Skills data not available")
+            category = "All"
+    
+    # Apply filters with safety checks
+    filtered_df = df.copy()
+    
+    if difficulty and 'Difficulty Level' in df.columns:
+        filtered_df = filtered_df[filtered_df['Difficulty Level'].isin(difficulty)]
+    
+    if 'Ratings' in df.columns:
+        filtered_df = filtered_df[filtered_df['Ratings'] >= min_rating]
+    
+    if category != "All" and 'Skills' in df.columns:
+        filtered_df = filtered_df[filtered_df['Skills'].apply(
+            lambda x: category in x if isinstance(x, (list, tuple)) else False
+        )]
     
     # Display results
     if not filtered_df.empty:
         st.write(f"Showing {len(filtered_df)} courses:")
         
         for _, row in filtered_df.iterrows():
-            with st.expander(f"{row['Course Name']} - ⭐ {row['Ratings']}"):
-                st.write(f"**Level:** {row['Difficulty Level']}")
-                st.write(f"**Skills:** {row['Skills']}")
-                st.write(f"**Description:** {row['Course Description']}")
-                st.write(f"[Enroll Now]({row['Course URL']})")
+            with st.expander(f"{row['Course Name']} - ⭐ {row.get('Ratings', 'N/A')}"):
+                st.write(f"**Level:** {row.get('Difficulty Level', 'N/A')}")
+                st.write(f"**Skills:** {row.get('Skills', 'Not available')}")
+                st.write(f"**Description:** {row.get('Course Description', 'No description available')}")
+                
+                if 'Course URL' in row:
+                    st.write(f"[Enroll Now]({row['Course URL']})")
                 
                 # Simulate enrollment
                 if st.button("Add to My Learning", key=f"enroll_{row['Course Name']}"):
@@ -623,9 +699,14 @@ def load_data():
     
     # Try to load sample data if no data uploaded
     try:
-        sample_data = pd.read_csv("https://raw.githubusercontent.com/example/course-data/main/sample_courses.csv")
-        sample_data['tags'] = sample_data[['Course Name', 'Difficulty Level', 'Course Description', 'Skills']].apply(lambda x: ' '.join(x.astype(str)), axis=1)
-        sample_data['tags'] = sample_data['tags'].apply(preprocess_text)
+        sample_data = pd.DataFrame({
+            'Course Name': ['Intro to Python', 'Data Science Fundamentals'],
+            'Difficulty Level': ['Beginner', 'Intermediate'],
+            'Ratings': [4.5, 4.2],
+            'Skills': [['Programming', 'Python'], ['Data', 'Analysis']],
+            'Course Description': ['Learn Python basics', 'Intro to Data Science'],
+            'Course URL': ['https://example.com/python', 'https://example.com/datascience']
+        })
         st.session_state.course_data = sample_data
         return sample_data
     except:
