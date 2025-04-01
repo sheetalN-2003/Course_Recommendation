@@ -32,18 +32,15 @@ st.set_page_config(
 # Initialize session state with all new features
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
-    
-    # User data structure with enhanced fields
     st.session_state.users = {
         'admin': {
-        'password': 'admin123',
-        'role': 'admin',
-        'totp_secret': 'JBSWY3DPEHPK3PXP',  
-        'progress': {}, 
-        'preferences': {
-        'learning_style': 'visual',
-        'topics': ['AI', 'Programming'],
-        'difficulty': 'intermediate'
+            'password': 'admin123',
+            'role': 'admin',
+            'progress': {},
+            'preferences': {
+                'learning_style': 'visual',
+                'topics': ['AI', 'Programming'],
+                'difficulty': 'intermediate'
             },
             'joined_date': datetime.now().strftime("%Y-%m-%d"),
             'last_login': datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -53,18 +50,15 @@ if 'initialized' not in st.session_state:
             'streak_days': 1,
             'points': 100,
             'oauth': None,
-            'totp_secret': None
+            'totp_secret': 'JBSWY3DPEHPK3PXP'  # Fixed TOTP secret
         }
     }
-    
     st.session_state.logged_in = None
     st.session_state.courses = pd.DataFrame(columns=[
         'Course Name', 'Description', 'Category', 'Skills', 'Difficulty Level',
         'Duration', 'Price', 'Instructor', 'Ratings', 'Course URL', 'Created At',
         'Syllabus', 'Video Hours', 'Exercises', 'Projects', 'Prerequisites'
     ])
-    
-    # Enhanced data structures
     st.session_state.messages = []
     st.session_state.learning_paths = {}
     st.session_state.forum_posts = []
@@ -80,7 +74,6 @@ if 'initialized' not in st.session_state:
             'daily_challenge': None
         }
     }
-
 # ======================
 # UTILITY FUNCTIONS
 # ======================
@@ -245,33 +238,40 @@ def login():
     login_method = st.radio("Login Method", ["Email/Password", "Google OAuth (Simulated)"])
     
     if login_method == "Email/Password":
-        # Main login form
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login")
-            
-        # Handle form submission outside the form
-        if submitted:
-            if (username in st.session_state.users and 
-                st.session_state.users[username]['password'] == password):
-                
-                # Check for 2FA - moved outside the main form
-                if 'totp_secret' in st.session_state.users[username]:
-                    st.info("Two-factor authentication required")
-                    token = st.text_input("Enter 2FA Code", key="2fa_input")
-                    
-                    if st.button("Verify"):
-                        if verify_totp(st.session_state.users[username]['totp_secret'], token):
-                            complete_login(username)
-                        else:
-                            st.error("Invalid 2FA code")
-                    return
-                
-                # No 2FA required
-                complete_login(username)
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        
+        if st.button("Login"):
+            if username in st.session_state.users and st.session_state.users[username]['password'] == password:
+                user = st.session_state.users[username]
+                if 'totp_secret' in user and user['totp_secret']:
+                    st.session_state.temp_user = username
+                    st.session_state.show_2fa = True
+                else:
+                    complete_login(username)
             else:
                 st.error("Invalid credentials!")
+                
+        if st.session_state.get('show_2fa'):
+            token = st.text_input("Enter 2FA Code")
+            if st.button("Verify"):
+                if verify_totp(st.session_state.users[st.session_state.temp_user]['totp_secret'], token):
+                    complete_login(st.session_state.temp_user)
+                    st.session_state.show_2fa = False
+                else:
+                    st.error("Invalid 2FA code")
+
+def complete_login(username):
+    st.session_state.logged_in = username
+    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    update_streak(username)
+    st.success(f"Welcome back, {username}!")
+    time.sleep(1)
+    st.rerun()
+
+def logout():
+    st.session_state.logged_in = None
+    st.rerun()
     else:
         # Simulated Google OAuth
         if st.button("Login with Google (Simulated)"):
@@ -897,6 +897,72 @@ def admin_analytics():
     else:
         st.warning("Admin access required")
 
+# COURSE MANAGEMENT (Added missing functions)
+def course_marketplace():
+    st.subheader("Course Marketplace")
+    for _, course in st.session_state.courses.iterrows():
+        with st.expander(course['Course Name']):
+            st.write(f"**Description:** {course['Description']}")
+            st.write(f"**Difficulty:** {course['Difficulty Level']}")
+            if st.button(f"Enroll in {course['Course Name']}", key=f"enroll_{course['Course Name']}"):
+                if st.session_state.logged_in:
+                    user = st.session_state.users[st.session_state.logged_in]
+                    user['progress'][course['Course Name']] = 0
+                    st.success("Enrolled successfully!")
+                else:
+                    st.warning("Please login to enroll")
+
+# ======================
+# LEARNING PATHS (Added missing functions)
+def create_learning_path():
+    with st.form("learning_path_form"):
+        name = st.text_input("Path Name")
+        goal = st.text_area("Learning Goal")
+        courses = st.multiselect("Select Courses", st.session_state.courses['Course Name'].tolist())
+        if st.form_submit_button("Create Path"):
+            path_id = f"path_{len(st.session_state.learning_paths)+1}"
+            st.session_state.learning_paths[path_id] = {
+                'name': name,
+                'goal': goal,
+                'courses': courses,
+                'progress': 0
+            }
+            st.success("Learning path created!")
+
+# ======================
+# USER PROGRESS (Added missing function)
+def user_progress():
+    if st.session_state.logged_in:
+        user = st.session_state.users[st.session_state.logged_in]
+        st.subheader("Your Progress")
+        for course, progress in user.get('progress', {}).items():
+            st.write(f"**{course}**")
+            st.progress(progress)
+            st.write(f"{progress}% Complete")
+
+# ======================
+# ADMIN FUNCTIONS (Added missing functions)
+def admin_add_course():
+    with st.form("add_course_form"):
+        course_data = {
+            'Course Name': st.text_input("Course Name"),
+            'Description': st.text_area("Description"),
+            'Category': st.selectbox("Category", ["Programming", "Data Science", "AI"]),
+            'Difficulty Level': st.selectbox("Difficulty", ["Beginner", "Intermediate", "Advanced"]),
+            'Duration': st.number_input("Duration (hours)", min_value=1)
+        }
+        if st.form_submit_button("Add Course"):
+            st.session_state.courses = st.session_state.courses.append(course_data, ignore_index=True)
+            st.success("Course added!")
+
+def admin_manage_courses():
+    st.subheader("Manage Courses")
+    edited_df = st.data_editor(st.session_state.courses)
+    if st.button("Save Changes"):
+        st.session_state.courses = edited_df
+        st.success("Courses updated!")
+
+
 # ======================
 # MAIN APPLICATION
 # ======================
@@ -1184,9 +1250,9 @@ def main():
     elif choice == "Admin Analytics" and st.session_state.logged_in == "admin":
         admin_analytics()
     
-    elif choice == "Logout" and st.session_state.logged_in:
+   elif choice == "Logout":
         logout()
-    
+        st.rerun()
     # Footer
     st.sidebar.markdown("---")
     st.sidebar.info("""
