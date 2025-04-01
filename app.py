@@ -156,98 +156,42 @@ def admin_panel():
     
     tab1, tab2, tab3 = st.tabs(["Dataset Management", "User Management", "System Analytics"])
     
-    with tab1:
-    st.subheader("Upload Platform Datasets")
-    
-    # Udemy Dataset Upload with more flexible column handling
-    with st.expander("Upload Udemy Dataset", expanded=True):
-        udemy_file = st.file_uploader("Choose Udemy CSV", type=['csv'], key='udemy_upload')
-        if udemy_file:
-            try:
-                udemy_df = pd.read_csv(udemy_file)
-
-                # Add this near the upload button
-st.markdown("""**Need a sample file?** [Download sample Udemy dataset](https://example.com/sample_udemy.csv)
-""")
-                
-                # Create column mapping dictionary
-                column_mapping = {
-                    'course_title': ['course_title', 'title', 'course', 'name'],
-                    'url': ['url', 'link', 'course_url'],
-                    'price': ['price', 'cost', 'amount'],
-                    'num_subscribers': ['num_subscribers', 'subscribers', 'enrollments'],
-                    'avg_rating': ['avg_rating', 'rating', 'average_rating']
-                }
-                
-                # Find matching columns
-                final_columns = {}
-                for standard_col, possible_cols in column_mapping.items():
-                    for col in possible_cols:
-                        if col in udemy_df.columns:
-                            final_columns[standard_col] = col
-                            break
-                
-                # Check if we found all required columns
-                if len(final_columns) == len(column_mapping):
-                    # Rename columns to standard names
-                    udemy_df = udemy_df.rename(columns=final_columns)
-                    st.session_state.platform_datasets['udemy'] = udemy_df
-                    st.success("Udemy dataset uploaded and processed successfully!")
-                    st.dataframe(udemy_df.head(3))
-                else:
-                    missing = set(column_mapping.keys()) - set(final_columns.keys())
-                    st.error(f"Could not find these required columns: {', '.join(missing)}")
-                    st.info("The file should contain columns that can be mapped to: course_title, url, price, num_subscribers, avg_rating")
-                    
-            except Exception as e:
-                st.error(f"Error loading Udemy data: {str(e)}")
-
-        # Check for Skills column in the dataframe
-        if not st.session_state.course_data.empty:
-            if 'Skills' not in st.session_state.course_data.columns:
-                st.error("Column 'Skills' not found in the dataset. Please check the data source.")
-            else:
-                category = st.selectbox("Category", ["All"] + list(st.session_state.course_data['Skills'].explode().unique()))
+    with tab1:  # This is line 159 - the 'with' statement that needs indented block
+        st.subheader("Upload Platform Datasets")  # This is line 160 - must be indented
         
+        # Udemy Dataset Upload
+        with st.expander("Upload Udemy Dataset", expanded=True):
+            udemy_file = st.file_uploader("Choose Udemy CSV", type=['csv'], key='udemy_upload')
+            if udemy_file:
+                try:
+                    udemy_df = pd.read_csv(udemy_file)
+                    required_cols = ['course_title', 'url', 'price', 'num_subscribers', 'avg_rating']
+                    if all(col in udemy_df.columns for col in required_cols):
+                        st.session_state.platform_datasets['udemy'] = udemy_df
+                        st.success("Udemy dataset uploaded successfully!")
+                        st.dataframe(udemy_df.head(3))
+                    else:
+                        st.error(f"Missing required columns. Needed: {', '.join(required_cols)}")
+                except Exception as e:
+                    st.error(f"Error loading Udemy data: {str(e)}")
+
         # Coursera Dataset Upload
-      # Coursera Dataset Upload with flexible columns
-with st.expander("Upload Coursera Dataset"):
-    coursera_file = st.file_uploader("Choose Coursera CSV", type=['csv'], key='coursera_upload')
-    if coursera_file:
-        try:
-            coursera_df = pd.read_csv(coursera_file)
-
-            
-            # Column mapping for Coursera
-            coursera_mapping = {
-                'course_name': ['course_name', 'title', 'name', 'course_title'],
-                'course_url': ['course_url', 'url', 'link'],
-                'course_rating': ['course_rating', 'rating', 'avg_rating'],
-                'course_difficulty': ['course_difficulty', 'difficulty', 'level']
-            }
-            
-            # Find matching columns
-            final_columns = {}
-            for standard_col, possible_cols in coursera_mapping.items():
-                for col in possible_cols:
-                    if col in coursera_df.columns:
-                        final_columns[standard_col] = col
-                        break
-            
-            if len(final_columns) == len(coursera_mapping):
-                coursera_df = coursera_df.rename(columns=final_columns)
-                st.session_state.platform_datasets['coursera'] = coursera_df
-                st.success("Coursera dataset uploaded and processed successfully!")
-                st.dataframe(coursera_df.head(3))
-            else:
-                missing = set(coursera_mapping.keys()) - set(final_columns.keys())
-                st.error(f"Could not find these required columns: {', '.join(missing)}")
-                st.info("The file should contain columns that can be mapped to: course_name, course_url, course_rating, course_difficulty")
-                
-        except Exception as e:
-            st.error(f"Error loading Coursera data: {str(e)}")
+        with st.expander("Upload Coursera Dataset"):
+            coursera_file = st.file_uploader("Choose Coursera CSV", type=['csv'], key='coursera_upload')
+            if coursera_file:
+                try:
+                    coursera_df = pd.read_csv(coursera_file)
+                    required_cols = ['course_name', 'course_url', 'course_rating', 'course_difficulty']
+                    if all(col in coursera_df.columns for col in required_cols):
+                        st.session_state.platform_datasets['coursera'] = coursera_df
+                        st.success("Coursera dataset uploaded successfully!")
+                        st.dataframe(coursera_df.head(3))
+                    else:
+                        st.error(f"Missing required columns. Needed: {', '.join(required_cols)}")
+                except Exception as e:
+                    st.error(f"Error loading Coursera data: {str(e)}")
         
-        # Dataset Merging - with proper checks
+        # Dataset Merging
         if ('platform_datasets' in st.session_state and 
             ('udemy' in st.session_state.platform_datasets or 
              'coursera' in st.session_state.platform_datasets)):
