@@ -867,7 +867,7 @@ def coding_challenge_game():
     user_code = st.text_area("Write your solution here:", height=200,
                            value="def solution(input):\n    # Your code here\n    return None")
     
-       if st.button("Submit Solution"):
+    if st.button("Submit Solution"):
     try:
         namespace = {}
         exec(user_code, namespace)
