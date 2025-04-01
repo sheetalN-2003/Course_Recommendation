@@ -21,7 +21,7 @@ import requests
 from io import BytesIO
 from PIL import Image
 
-# Set page config IMMEDIATELY after streamlit import
+# Set page config
 st.set_page_config(
     page_title="AI Learning Platform",
     page_icon="🎓",
@@ -29,51 +29,56 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Initialize session state with all new features
-if 'initialized' not in st.session_state:
-    st.session_state.initialized = True
-    st.session_state.users = {
-        'admin': {
-            'password': 'admin123',
-            'role': 'admin',
-            'progress': {},
-            'preferences': {
-                'learning_style': 'visual',
-                'topics': ['AI', 'Programming'],
-                'difficulty': 'intermediate'
-            },
-            'joined_date': datetime.now().strftime("%Y-%m-%d"),
-            'last_login': datetime.now().strftime("%Y-%m-%d %H:%M"),
-            'badges': ['early_adopter'],
-            'quiz_scores': {},
-            'forum_posts': 0,
-            'streak_days': 1,
-            'points': 100,
-            'oauth': None,
-            'totp_secret': 'JBSWY3DPEHPK3PXP'  # Fixed TOTP secret
+# Initialize session state
+def initialize_session_state():
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = True
+        st.session_state.users = {
+            'admin': {
+                'password': 'admin123',
+                'role': 'admin',
+                'progress': {},
+                'preferences': {
+                    'learning_style': 'visual',
+                    'topics': ['AI', 'Programming'],
+                    'difficulty': 'intermediate'
+                },
+                'joined_date': datetime.now().strftime("%Y-%m-%d"),
+                'last_login': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                'badges': ['early_adopter'],
+                'quiz_scores': {},
+                'forum_posts': 0,
+                'streak_days': 1,
+                'points': 100,
+                'oauth': None,
+                'totp_secret': None  # No 2FA for admin
+            }
         }
-    }
-    st.session_state.logged_in = None
-    st.session_state.courses = pd.DataFrame(columns=[
-        'Course Name', 'Description', 'Category', 'Skills', 'Difficulty Level',
-        'Duration', 'Price', 'Instructor', 'Ratings', 'Course URL', 'Created At',
-        'Syllabus', 'Video Hours', 'Exercises', 'Projects', 'Prerequisites'
-    ])
-    st.session_state.messages = []
-    st.session_state.learning_paths = {}
-    st.session_state.forum_posts = []
-    st.session_state.quiz_questions = {}
-    st.session_state.user_analytics = {}
-    st.session_state.code_exercises = {}
-    st.session_state.ai_assistant_history = {}
-    st.session_state.leaderboard = {}
-    st.session_state.certificates = {}
-    st.session_state.games = {
-        'coding_challenge': {
-            'high_scores': {},
-            'daily_challenge': None
+        st.session_state.logged_in = None
+        st.session_state.courses = pd.DataFrame(columns=[
+            'Course Name', 'Description', 'Category', 'Skills', 'Difficulty Level',
+            'Duration', 'Price', 'Instructor', 'Ratings', 'Course URL', 'Created At',
+            'Syllabus', 'Video Hours', 'Exercises', 'Projects', 'Prerequisites'
+        ])
+        st.session_state.messages = []
+        st.session_state.learning_paths = {}
+        st.session_state.forum_posts = []
+        st.session_state.quiz_questions = {}
+        st.session_state.user_analytics = {}
+        st.session_state.code_exercises = {}
+        st.session_state.ai_assistant_history = {}
+        st.session_state.leaderboard = {}
+        st.session_state.certificates = {}
+        st.session_state.games = {
+            'coding_challenge': {
+                'high_scores': {},
+                'daily_challenge': None
+            }
         }
-    }
+
+# Initialize the session state
+initialize_session_state()
+
 # ======================
 # UTILITY FUNCTIONS
 # ======================
@@ -156,8 +161,85 @@ def generate_totp_secret():
 
 def verify_totp(secret, token):
     """Verify TOTP token"""
+    if not secret:
+        return False
     totp = pyotp.TOTP(secret)
     return totp.verify(token)
+
+def update_streak(username):
+    """Update user login streak"""
+    user = st.session_state.users[username]
+    last_login = datetime.strptime(user['last_login'], "%Y-%m-%d %H:%M") if 'last_login' in user else None
+    today = datetime.now()
+    
+    if last_login:
+        delta = (today - last_login).days
+        if delta == 1:  # Consecutive day
+            user['streak_days'] += 1
+            if user['streak_days'] % 7 == 0:
+                award_badge(username, f"streak_{user['streak_days']}_days")
+                user['points'] += 50
+        elif delta > 1:  # Broken streak
+            user['streak_days'] = 1
+    else:
+        user['streak_days'] = 1
+    
+    # Award points for daily login
+    user['points'] = user.get('points', 0) + 10
+    
+    # Update leaderboard
+    update_leaderboard(username, user['points'])
+
+def award_badge(username, badge_name):
+    """Award badge to user"""
+    if username in st.session_state.users:
+        if 'badges' not in st.session_state.users[username]:
+            st.session_state.users[username]['badges'] = []
+        
+        if badge_name not in st.session_state.users[username]['badges']:
+            st.session_state.users[username]['badges'].append(badge_name)
+            st.session_state.users[username]['points'] += 20
+            return True
+    return False
+
+def update_leaderboard(username, points):
+    """Update leaderboard with user points"""
+    st.session_state.leaderboard[username] = points
+
+def recommend_courses_advanced(df, user_prefs, num_recommendations=5):
+    """Advanced course recommendation using NLP and ML techniques"""
+    if df.empty:
+        return []
+    
+    # Create feature vectors for each course
+    df['feature_vector'] = df['Course Name'] + " " + df['Description'] + " " + \
+                          df['Category'] + " " + df['Difficulty Level'] + " " + \
+                          df['Skills'].apply(lambda x: " ".join(x) if isinstance(x, list) else str(x))
+    
+    # Create TF-IDF vectors
+    tfidf = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = tfidf.fit_transform(df['feature_vector'])
+    
+    # Create user preference vector
+    user_vector = " ".join([
+        user_prefs.get('learning_style', ''),
+        " ".join(user_prefs.get('topics', [])),
+        user_prefs.get('difficulty', '')
+    ])
+    user_tfidf = tfidf.transform([user_vector])
+    
+    # Calculate cosine similarity
+    cosine_sim = cosine_similarity(user_tfidf, tfidf_matrix)
+    
+    # Get top recommendations
+    sim_scores = list(enumerate(cosine_sim[0]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    
+    # Get top N courses
+    top_indices = [i[0] for i in sim_scores[:num_recommendations]]
+    recommendations = df.iloc[top_indices].to_dict('records')
+    
+    return recommendations
 
 # ======================
 # AUTHENTICATION SYSTEM
@@ -182,7 +264,7 @@ def register():
             difficulty = st.selectbox("Preferred Difficulty Level", 
                                     ["Beginner", "Intermediate", "Advanced"])
         
-        enable_2fa = st.checkbox("Enable Two-Factor Authentication (Recommended)")
+        enable_2fa = st.checkbox("Enable Two-Factor Authentication")
         submitted = st.form_submit_button("Register")
         
         if submitted:
@@ -225,14 +307,6 @@ def register():
                 time.sleep(1)
                 st.rerun()
 
-def complete_login(username):
-    st.session_state.logged_in = username
-    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-    update_streak(username)
-    st.success(f"Welcome back, {username}!")
-    time.sleep(1)
-    st.rerun()
-
 def login():
     st.subheader("Login")
     login_method = st.radio("Login Method", ["Email/Password", "Google OAuth (Simulated)"])
@@ -244,6 +318,12 @@ def login():
         if st.button("Login"):
             if username in st.session_state.users and st.session_state.users[username]['password'] == password:
                 user = st.session_state.users[username]
+                
+                # Skip 2FA for admin
+                if username == 'admin':
+                    complete_login(username)
+                    return
+                
                 if 'totp_secret' in user and user['totp_secret']:
                     st.session_state.temp_user = username
                     st.session_state.show_2fa = True
@@ -258,20 +338,9 @@ def login():
                 if verify_totp(st.session_state.users[st.session_state.temp_user]['totp_secret'], token):
                     complete_login(st.session_state.temp_user)
                     st.session_state.show_2fa = False
+                    del st.session_state.temp_user
                 else:
                     st.error("Invalid 2FA code")
-
-def complete_login(username):
-    st.session_state.logged_in = username
-    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-    update_streak(username)
-    st.success(f"Welcome back, {username}!")
-    time.sleep(1)
-    st.rerun()
-
-def logout():
-    st.session_state.logged_in = None
-    st.rerun()
     else:
         # Simulated Google OAuth
         if st.button("Login with Google (Simulated)"):
@@ -297,97 +366,237 @@ def logout():
                     'streak_days': 1,
                     'points': 50,
                     'email': simulated_email,
-                    'oauth': 'google'
+                    'oauth': 'google',
+                    'totp_secret': None
                 }
             
-            st.session_state.logged_in = username
-            st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            update_streak(username)
-            st.success(f"Welcome {username} via Google!")
+            complete_login(username)
+
+def complete_login(username):
+    st.session_state.logged_in = username
+    st.session_state.users[username]['last_login'] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    update_streak(username)
+    st.success(f"Welcome back, {username}!")
+    time.sleep(1)
+    st.rerun()
+
+def logout():
+    st.session_state.logged_in = None
+    st.rerun()
+
+# ======================
+# COURSE MANAGEMENT
+# ======================
+
+def course_marketplace():
+    st.subheader("Course Marketplace")
+    
+    if st.session_state.courses.empty:
+        st.warning("No courses available yet.")
+        return
+    
+    for _, course in st.session_state.courses.iterrows():
+        with st.expander(f"{course['Course Name']} - {course['Difficulty Level']}"):
+            st.write(f"**Description:** {course['Description']}")
+            st.write(f"**Category:** {course['Category']}")
+            st.write(f"**Duration:** {course['Duration']} hours")
+            st.write(f"**Instructor:** {course['Instructor']}")
+            st.write(f"**Rating:** {course['Ratings']}/5")
+            
+            if st.session_state.logged_in:
+                if st.button(f"Enroll in {course['Course Name']}", key=f"enroll_{course['Course Name']}"):
+                    user = st.session_state.users[st.session_state.logged_in]
+                    if course['Course Name'] not in user['progress']:
+                        user['progress'][course['Course Name'] = 0
+                        st.success("Enrolled successfully!")
+                        st.rerun()
+                    else:
+                        st.warning("You're already enrolled in this course!")
+            else:
+                st.warning("Please login to enroll in courses")
+
+def admin_add_course():
+    st.subheader("Add New Course")
+    with st.form("add_course_form"):
+        course_data = {
+            'Course Name': st.text_input("Course Name"),
+            'Description': st.text_area("Description"),
+            'Category': st.selectbox("Category", ["Programming", "Data Science", "AI", "Business", "Design"]),
+            'Skills': st.multiselect("Skills Covered", ["Python", "Machine Learning", "Data Analysis", "Web Development", "SQL"]),
+            'Difficulty Level': st.selectbox("Difficulty Level", ["Beginner", "Intermediate", "Advanced"]),
+            'Duration': st.number_input("Duration (hours)", min_value=1, value=10),
+            'Price': st.number_input("Price", min_value=0, value=0),
+            'Instructor': st.text_input("Instructor Name", value="AI Learning Platform"),
+            'Ratings': st.slider("Rating", 1.0, 5.0, 4.5, 0.1),
+            'Course URL': st.text_input("Course URL", value="https://example.com/course"),
+            'Created At': datetime.now().strftime("%Y-%m-%d"),
+            'Syllabus': st.text_area("Syllabus", value="Week 1: Introduction\nWeek 2: Fundamentals\nWeek 3: Advanced Topics"),
+            'Video Hours': st.number_input("Video Hours", min_value=0, value=5),
+            'Exercises': st.number_input("Number of Exercises", min_value=0, value=10),
+            'Projects': st.number_input("Number of Projects", min_value=0, value=2),
+            'Prerequisites': st.text_input("Prerequisites", value="None")
+        }
+        
+        if st.form_submit_button("Add Course"):
+            new_course = pd.DataFrame([course_data])
+            st.session_state.courses = pd.concat([st.session_state.courses, new_course], ignore_index=True)
+            st.success("Course added successfully!")
             time.sleep(1)
             st.rerun()
 
-def update_streak(username):
-    """Update user login streak"""
-    user = st.session_state.users[username]
-    last_login = datetime.strptime(user['last_login'], "%Y-%m-%d %H:%M") if 'last_login' in user else None
-    today = datetime.now()
+def admin_manage_courses():
+    st.subheader("Manage Courses")
     
-    if last_login:
-        delta = (today - last_login).days
-        if delta == 1:  # Consecutive day
-            user['streak_days'] += 1
-            if user['streak_days'] % 7 == 0:
-                award_badge(username, f"streak_{user['streak_days']}_days")
-                user['points'] += 50
-        elif delta > 1:  # Broken streak
-            user['streak_days'] = 1
-    else:
-        user['streak_days'] = 1
+    if st.session_state.courses.empty:
+        st.warning("No courses to manage")
+        return
     
-    # Award points for daily login
-    user['points'] = user.get('points', 0) + 10
+    edited_df = st.data_editor(st.session_state.courses, num_rows="dynamic")
     
-    # Update leaderboard
-    update_leaderboard(username, user['points'])
-
-def award_badge(username, badge_name):
-    """Award badge to user"""
-    if username in st.session_state.users:
-        if 'badges' not in st.session_state.users[username]:
-            st.session_state.users[username]['badges'] = []
+    if st.button("Save Changes"):
+        st.session_state.courses = edited_df
+        st.success("Courses updated successfully!")
+        time.sleep(1)
+        st.rerun()
         
-        if badge_name not in st.session_state.users[username]['badges']:
-            st.session_state.users[username]['badges'].append(badge_name)
-            st.session_state.users[username]['points'] += 20
-            return True
-    return False
-
-def update_leaderboard(username, points):
-    """Update leaderboard with user points"""
-    st.session_state.leaderboard[username] = points
+    if st.button("Reset to Original"):
+        st.rerun()
 
 # ======================
-# AI RECOMMENDATION SYSTEM
+# LEARNING PATHS
 # ======================
 
-def recommend_courses_advanced(df, user_prefs, num_recommendations=5):
-    """Advanced course recommendation using NLP and ML techniques"""
-    if df.empty:
-        return []
+def create_learning_path():
+    st.subheader("Create Learning Path")
     
-    # Create feature vectors for each course
-    df['feature_vector'] = df['Course Name'] + " " + df['Description'] + " " + \
-                          df['Category'] + " " + df['Difficulty Level'] + " " + \
-                          df['Skills'].apply(lambda x: " ".join(x))
+    with st.form("learning_path_form"):
+        name = st.text_input("Path Name")
+        goal = st.text_area("Learning Goal")
+        courses = st.multiselect("Select Courses", st.session_state.courses['Course Name'].tolist())
+        
+        if st.form_submit_button("Create Path"):
+            if not name or not goal or not courses:
+                st.error("Please fill all fields")
+            else:
+                path_id = f"path_{len(st.session_state.learning_paths)+1}"
+                st.session_state.learning_paths[path_id] = {
+                    'name': name,
+                    'goal': goal,
+                    'courses': courses,
+                    'progress': 0,
+                    'created_by': st.session_state.logged_in,
+                    'created_at': datetime.now().strftime("%Y-%m-%d")
+                }
+                st.success("Learning path created successfully!")
+                time.sleep(1)
+                st.rerun()
+
+def view_learning_paths():
+    st.subheader("Your Learning Paths")
     
-    # Create TF-IDF vectors
-    tfidf = TfidfVectorizer(stop_words='english')
-    tfidf_matrix = tfidf.fit_transform(df['feature_vector'])
+    if not st.session_state.learning_paths:
+        st.warning("You haven't created any learning paths yet")
+        return
     
-    # Create user preference vector
-    user_vector = " ".join([
-        user_prefs.get('learning_style', ''),
-        " ".join(user_prefs.get('topics', [])),
-        user_prefs.get('difficulty', '')
-    ])
-    user_tfidf = tfidf.transform([user_vector])
+    user_paths = [p for p in st.session_state.learning_paths.values() 
+                 if p['created_by'] == st.session_state.logged_in]
     
-    # Calculate cosine similarity
-    cosine_sim = cosine_similarity(user_tfidf, tfidf_matrix)
+    if not user_paths:
+        st.warning("You haven't created any learning paths yet")
+        return
     
-    # Get top recommendations
-    sim_scores = list(enumerate(cosine_sim[0]))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-    
-    # Get top N courses
-    top_indices = [i[0] for i in sim_scores[:num_recommendations]]
-    recommendations = df.iloc[top_indices].to_dict('records')
-    
-    return recommendations
+    for path_id, path in st.session_state.learning_paths.items():
+        if path['created_by'] == st.session_state.logged_in:
+            with st.expander(f"{path['name']} - {path['progress']}% complete"):
+                st.write(f"**Goal:** {path['goal']}")
+                st.write("**Courses:**")
+                
+                total_progress = 0
+                for course in path['courses']:
+                    course_progress = st.session_state.users[st.session_state.logged_in]['progress'].get(course, 0)
+                    st.write(f"- {course} ({course_progress}%)")
+                    total_progress += course_progress
+                
+                # Calculate overall progress
+                if path['courses']:
+                    overall_progress = total_progress // len(path['courses'])
+                    path['progress'] = overall_progress
+                
+                # Mark as complete button
+                if st.button(f"Mark as Completed", key=f"complete_{path_id}"):
+                    if path['progress'] < 100:
+                        st.warning("Complete all courses to finish this path")
+                    else:
+                        path['progress'] = 100
+                        
+                        # Generate certificate
+                        cert_id = generate_pdf_certificate(
+                            st.session_state.logged_in,
+                            path['name'],
+                            datetime.now().strftime("%Y-%m-%d")
+                        )
+                        
+                        # Award badge
+                        award_badge(st.session_state.logged_in, f"path_completed_{path_id}")
+                        
+                        st.success("Learning path completed!")
+                        st.markdown(create_download_link(
+                            st.session_state.certificates[cert_id]['pdf'],
+                            f"Certificate_{path['name']}"
+                        ), unsafe_allow_html=True)
+                        st.rerun()
 
 # ======================
-# AI CHATBOT & VOICE ASSISTANT
+# USER PROGRESS
+# ======================
+
+def user_progress():
+    st.subheader("Your Learning Progress")
+    
+    if not st.session_state.logged_in:
+        st.warning("Please login to view your progress")
+        return
+    
+    user = st.session_state.users[st.session_state.logged_in]
+    
+    if not user.get('progress'):
+        st.warning("You haven't enrolled in any courses yet")
+        return
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("### Course Progress")
+        for course, progress in user['progress'].items():
+            st.write(f"**{course}**")
+            st.progress(progress)
+            st.write(f"{progress}% Complete")
+            
+            # Add progress slider
+            new_progress = st.slider(f"Update progress for {course}", 0, 100, progress, key=f"progress_{course}")
+            if new_progress != progress:
+                user['progress'][course] = new_progress
+                st.success("Progress updated!")
+                st.rerun()
+    
+    with col2:
+        st.write("### Your Certificates")
+        user_certs = [c for c in st.session_state.certificates.values() 
+                     if c['user'] == st.session_state.logged_in]
+        
+        if user_certs:
+            for cert in user_certs:
+                with st.expander(f"Certificate: {cert['course']}"):
+                    st.write(f"Completed on: {cert['date']}")
+                    st.markdown(create_download_link(
+                        cert['pdf'],
+                        f"Certificate_{cert['course']}"
+                    ), unsafe_allow_html=True)
+        else:
+            st.write("You haven't earned any certificates yet.")
+
+# ======================
+# AI CHATBOT
 # ======================
 
 def ai_chatbot():
@@ -401,18 +610,19 @@ def ai_chatbot():
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
     
-    # Voice input
-    if st.button("🎤 Use Voice Input"):
-        with st.spinner("Listening..."):
-            recognizer = sr.Recognizer()
-            with sr.Microphone() as source:
-                audio = recognizer.listen(source)
-                try:
-                    user_input = recognizer.recognize_google(audio)
-                    st.session_state.chat_history.append({"role": "user", "content": user_input})
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Could not understand audio: {str(e)}")
+    # Voice input (simulated)
+    if st.button("🎤 Use Voice Input (Simulated)"):
+        with st.spinner("Listening (simulated)..."):
+            time.sleep(2)
+            sample_responses = [
+                "I need help with Python lists",
+                "What courses do you recommend for data science?",
+                "How do I reset my password?",
+                "Explain machine learning to me"
+            ]
+            user_input = random.choice(sample_responses)
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
+            st.rerun()
     
     # Text input
     user_input = st.chat_input("Ask your learning question...")
@@ -454,7 +664,7 @@ def generate_ai_response(query):
     return "I'm here to help with your learning journey! You can ask me about courses, your progress, or specific topics you're studying."
 
 # ======================
-# QUIZ & ASSESSMENT SYSTEM
+# QUIZ SYSTEM
 # ======================
 
 def quiz_system():
@@ -464,6 +674,48 @@ def quiz_system():
         st.session_state.current_quiz = None
         st.session_state.quiz_answers = {}
         st.session_state.quiz_score = 0
+    
+    # Initialize sample quizzes if empty
+    if not st.session_state.quiz_questions:
+        st.session_state.quiz_questions = {
+            'Python Basics': {
+                'description': 'Test your Python fundamentals',
+                'questions': [
+                    {
+                        'question': 'What is the output of print(2**3)?',
+                        'type': 'mcq',
+                        'options': ['6', '8', '9', '23'],
+                        'answer': '8'
+                    },
+                    {
+                        'question': 'Python is an interpreted language',
+                        'type': 'true_false',
+                        'answer': 'True'
+                    },
+                    {
+                        'question': 'What keyword defines a function in Python?',
+                        'type': 'short_answer',
+                        'answer': 'def'
+                    }
+                ]
+            },
+            'Data Science Concepts': {
+                'description': 'Basic data science knowledge check',
+                'questions': [
+                    {
+                        'question': 'Which library is primarily used for data manipulation in Python?',
+                        'type': 'mcq',
+                        'options': ['NumPy', 'Pandas', 'Matplotlib', 'Scikit-learn'],
+                        'answer': 'Pandas'
+                    },
+                    {
+                        'question': 'Supervised learning requires labeled data',
+                        'type': 'true_false',
+                        'answer': 'True'
+                    }
+                ]
+            }
+        }
     
     # Select quiz
     quiz_options = list(st.session_state.quiz_questions.keys())
@@ -480,6 +732,7 @@ def quiz_system():
         quiz = st.session_state.quiz_questions[st.session_state.current_quiz]
         
         st.write(f"## {st.session_state.current_quiz}")
+        st.write(quiz['description'])
         st.write(f"Questions: {len(quiz['questions'])}")
         
         with st.form("quiz_form"):
@@ -559,17 +812,17 @@ def quiz_system():
                     st.rerun()
 
 # ======================
-# GAMIFICATION SYSTEM
+# CODING CHALLENGE
 # ======================
 
 def coding_challenge_game():
     st.subheader("Daily Coding Challenge")
     
+    # Initialize or reset daily challenge
     if 'daily_challenge' not in st.session_state.games['coding_challenge'] or \
        st.session_state.games['coding_challenge']['daily_challenge'] is None or \
        st.session_state.games['coding_challenge']['daily_challenge']['date'] != datetime.now().strftime("%Y-%m-%d"):
         
-        # Generate new daily challenge
         challenges = [
             {
                 'problem': "Write a function that reverses a string.",
@@ -653,7 +906,7 @@ def coding_challenge_game():
                     })
             
             # Calculate score
-            score = int((passed / len(challenge['test_cases'])) * 100)
+            score = int((passed / len(challenge['test_cases'])) * 100
             
             # Display results
             st.write("### Test Results")
@@ -665,7 +918,7 @@ def coding_challenge_game():
                 st.write(f"- {'✅ Passed' if result['correct'] else '❌ Failed'}")
                 st.write("---")
             
-            st.write(f"### Final Score: {score}%")
+                       st.write(f"### Final Score: {score}%")
             
             # Update high scores for logged in users
             if st.session_state.logged_in and st.session_state.logged_in != "guest":
@@ -692,7 +945,7 @@ def coding_challenge_game():
             st.error(f"Error in your code: {str(e)}")
 
 # ======================
-# FORUM & COMMUNITY SYSTEM
+# COMMUNITY FORUM
 # ======================
 
 def community_forum():
@@ -739,22 +992,25 @@ def community_forum():
                 tags = st.multiselect("Tags", ["Question", "Help", "Discussion", "Feedback", "Technical"])
                 
                 if st.form_submit_button("Create Post"):
-                    new_post = {
-                        'id': len(st.session_state.forum_posts) + 1,
-                        'title': title,
-                        'content': content,
-                        'author': st.session_state.logged_in,
-                        'date': datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        'tags': tags,
-                        'replies': []
-                    }
-                    st.session_state.forum_posts.append(new_post)
-                    st.session_state.users[st.session_state.logged_in]['forum_posts'] += 1
-                    st.session_state.users[st.session_state.logged_in]['points'] += 10
-                    award_badge(st.session_state.logged_in, "community_contributor")
-                    st.success("Post created successfully!")
-                    time.sleep(1)
-                    st.rerun()
+                    if not title or not content:
+                        st.error("Title and content are required")
+                    else:
+                        new_post = {
+                            'id': len(st.session_state.forum_posts) + 1,
+                            'title': title,
+                            'content': content,
+                            'author': st.session_state.logged_in,
+                            'date': datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            'tags': tags,
+                            'replies': []
+                        }
+                        st.session_state.forum_posts.append(new_post)
+                        st.session_state.users[st.session_state.logged_in]['forum_posts'] += 1
+                        st.session_state.users[st.session_state.logged_in]['points'] += 10
+                        award_badge(st.session_state.logged_in, "community_contributor")
+                        st.success("Post created successfully!")
+                        time.sleep(1)
+                        st.rerun()
         else:
             st.warning("Please log in to create new posts.")
     
@@ -768,6 +1024,10 @@ def community_forum():
                     with st.expander(f"{post['title']} ({post['date']})"):
                         st.write(post['content'])
                         st.write(f"**Replies:** {len(post['replies'])}")
+                        if st.button(f"Delete Post", key=f"delete_{post['id']}"):
+                            st.session_state.forum_posts = [p for p in st.session_state.forum_posts if p['id'] != post['id']]
+                            st.success("Post deleted")
+                            st.rerun()
             else:
                 st.write("You haven't created any posts yet.")
         else:
@@ -897,72 +1157,6 @@ def admin_analytics():
     else:
         st.warning("Admin access required")
 
-# COURSE MANAGEMENT (Added missing functions)
-def course_marketplace():
-    st.subheader("Course Marketplace")
-    for _, course in st.session_state.courses.iterrows():
-        with st.expander(course['Course Name']):
-            st.write(f"**Description:** {course['Description']}")
-            st.write(f"**Difficulty:** {course['Difficulty Level']}")
-            if st.button(f"Enroll in {course['Course Name']}", key=f"enroll_{course['Course Name']}"):
-                if st.session_state.logged_in:
-                    user = st.session_state.users[st.session_state.logged_in]
-                    user['progress'][course['Course Name']] = 0
-                    st.success("Enrolled successfully!")
-                else:
-                    st.warning("Please login to enroll")
-
-# ======================
-# LEARNING PATHS (Added missing functions)
-def create_learning_path():
-    with st.form("learning_path_form"):
-        name = st.text_input("Path Name")
-        goal = st.text_area("Learning Goal")
-        courses = st.multiselect("Select Courses", st.session_state.courses['Course Name'].tolist())
-        if st.form_submit_button("Create Path"):
-            path_id = f"path_{len(st.session_state.learning_paths)+1}"
-            st.session_state.learning_paths[path_id] = {
-                'name': name,
-                'goal': goal,
-                'courses': courses,
-                'progress': 0
-            }
-            st.success("Learning path created!")
-
-# ======================
-# USER PROGRESS (Added missing function)
-def user_progress():
-    if st.session_state.logged_in:
-        user = st.session_state.users[st.session_state.logged_in]
-        st.subheader("Your Progress")
-        for course, progress in user.get('progress', {}).items():
-            st.write(f"**{course}**")
-            st.progress(progress)
-            st.write(f"{progress}% Complete")
-
-# ======================
-# ADMIN FUNCTIONS (Added missing functions)
-def admin_add_course():
-    with st.form("add_course_form"):
-        course_data = {
-            'Course Name': st.text_input("Course Name"),
-            'Description': st.text_area("Description"),
-            'Category': st.selectbox("Category", ["Programming", "Data Science", "AI"]),
-            'Difficulty Level': st.selectbox("Difficulty", ["Beginner", "Intermediate", "Advanced"]),
-            'Duration': st.number_input("Duration (hours)", min_value=1)
-        }
-        if st.form_submit_button("Add Course"):
-            st.session_state.courses = st.session_state.courses.append(course_data, ignore_index=True)
-            st.success("Course added!")
-
-def admin_manage_courses():
-    st.subheader("Manage Courses")
-    edited_df = st.data_editor(st.session_state.courses)
-    if st.button("Save Changes"):
-        st.session_state.courses = edited_df
-        st.success("Courses updated!")
-
-
 # ======================
 # MAIN APPLICATION
 # ======================
@@ -1010,47 +1204,6 @@ def main():
         ]
         st.session_state.courses = pd.DataFrame(sample_courses)
     
-    if not st.session_state.quiz_questions:
-        st.session_state.quiz_questions = {
-            'Python Basics': {
-                'description': 'Test your Python fundamentals',
-                'questions': [
-                    {
-                        'question': 'What is the output of print(2**3)?',
-                        'type': 'mcq',
-                        'options': ['6', '8', '9', '23'],
-                        'answer': '8'
-                    },
-                    {
-                        'question': 'Python is an interpreted language',
-                        'type': 'true_false',
-                        'answer': 'True'
-                    },
-                    {
-                        'question': 'What keyword defines a function in Python?',
-                        'type': 'short_answer',
-                        'answer': 'def'
-                    }
-                ]
-            },
-            'Data Science Concepts': {
-                'description': 'Basic data science knowledge check',
-                'questions': [
-                    {
-                        'question': 'Which library is primarily used for data manipulation in Python?',
-                        'type': 'mcq',
-                        'options': ['NumPy', 'Pandas', 'Matplotlib', 'Scikit-learn'],
-                        'answer': 'Pandas'
-                    },
-                    {
-                        'question': 'Supervised learning requires labeled data',
-                        'type': 'true_false',
-                        'answer': 'True'
-                    }
-                ]
-            }
-        }
-    
     # Sidebar navigation
     st.sidebar.title("Navigation")
     
@@ -1080,7 +1233,7 @@ def main():
                 for badge in user['badges']:
                     st.write(f"• {badge.replace('_', ' ').title()}")
     
-    # Main content area
+    # Main content routing
     if choice == "Home":
         st.title("AI Learning Platform")
         st.write("Welcome to our intelligent course recommendation system!")
@@ -1174,60 +1327,13 @@ def main():
         tab1, tab2 = st.tabs(["My Paths", "Create New"])
         
         with tab1:
-            if st.session_state.learning_paths:
-                for path_id, path in st.session_state.learning_paths.items():
-                    with st.expander(f"{path['name']} - {path['progress']}% complete"):
-                        st.write(f"**Goal:** {path['goal']}")
-                        st.write("**Courses:**")
-                        for course in path['courses']:
-                            # Add progress for each course
-                            course_progress = st.session_state.users[st.session_state.logged_in]['progress'].get(course, 0)
-                            st.write(f"- {course} ({course_progress}%)")
-                        
-                        # Path completion button
-                        if st.button("Mark as Completed", key=f"complete_{path_id}"):
-                            path['progress'] = 100
-                            
-                            # Generate certificate
-                            cert_id = generate_pdf_certificate(
-                                st.session_state.logged_in,
-                                path['name'],
-                                datetime.now().strftime("%Y-%m-%d")
-                            )
-                            
-                            # Award badge
-                            award_badge(st.session_state.logged_in, f"path_completed_{path_id}")
-                            
-                            st.success("Learning path completed!")
-                            st.markdown(create_download_link(
-                                st.session_state.certificates[cert_id]['pdf'],
-                                f"Certificate_{path['name']}"
-                            ), unsafe_allow_html=True)
-                            st.rerun()
-            else:
-                st.write("You haven't created any learning paths yet.")
+            view_learning_paths()
         
         with tab2:
             create_learning_path()
     
     elif choice == "My Progress" and st.session_state.logged_in and st.session_state.logged_in != "guest":
         user_progress()
-        
-        # Display certificates
-        st.write("### Your Certificates")
-        user_certs = [c for c in st.session_state.certificates.values() 
-                     if c['user'] == st.session_state.logged_in]
-        
-        if user_certs:
-            for cert in user_certs:
-                with st.expander(f"Certificate: {cert['course']}"):
-                    st.write(f"Completed on: {cert['date']}")
-                    st.markdown(create_download_link(
-                        cert['pdf'],
-                        f"Certificate_{cert['course']}"
-                    ), unsafe_allow_html=True)
-        else:
-            st.write("You haven't earned any certificates yet.")
     
     elif choice == "AI Assistant":
         ai_chatbot()
@@ -1250,9 +1356,9 @@ def main():
     elif choice == "Admin Analytics" and st.session_state.logged_in == "admin":
         admin_analytics()
     
-   elif choice == "Logout":
+    elif choice == "Logout":
         logout()
-        st.rerun()
+    
     # Footer
     st.sidebar.markdown("---")
     st.sidebar.info("""
